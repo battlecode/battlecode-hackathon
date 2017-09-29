@@ -39,17 +39,24 @@
     - Order-independent turn solver (c.f. Diplomacy)? Send state after every player?
     - Multiple games at once
 - Backend
+    - Data upload
     - Sandboxing
     - Scrimmages
     - Tournament
 - Client
     - Data upload
+        - battlecode.json
+            - Team name
+            - Language
+            - Version
+            - Player profile picture?
+        - Zip & POST?
     - Authentication
-    - Player profile picture?
     - Languages:
         - Java
         - Javascript?
         - Rust?
+        - C#?
     - Language packages
 - Website
     - Scrimmage viewer

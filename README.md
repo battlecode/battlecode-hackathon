@@ -8,12 +8,12 @@
         - Game start
             - Game ID
             - Players
-            - Map (size, dirt, grass, hedge)
+            - Map (size, dirt)
         - Turn
             - Game ID
             - Round #
             - Successful actions
-            - All units with changed state
+            - All units created / with changed state (incl. hedge, statues)
             - All regions with changed owners
 
 - Server [?]
@@ -57,6 +57,8 @@
         - Javascript?
         - Rust?
         - C#?
+    - Helpers
+        - Pathfinding
     - Language packages
 - Website
     - Scrimmage viewer

@@ -19,7 +19,9 @@
   },
   "homepage": "https://github.com/kazimuth/battlecode-hackathon#readme",
   "dependencies": {
-    "ajv": "^5.2.3"
+    "@types/byline": "^4.2.31",
+    "ajv": "^5.2.3",
+    "byline": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^8.0.31",

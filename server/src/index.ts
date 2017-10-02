@@ -1,6 +1,7 @@
 import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, WorldData } from './schema';
 import { Game, TurnDiff } from './game';
 import * as net from 'net';
+import * as byline from 'byline';
 
 interface StateSetup {
     state: "setup",
@@ -33,6 +34,7 @@ function broadcast(message: OutgoingCommand) {
     var messageString = JSON.stringify(message);
     for (var listener of state.listeners) {
         listener.write(messageString);
+        listener.write('\n');
     }
 }
 
@@ -51,10 +53,12 @@ function handleDiff(diff: TurnDiff) {
 }
 
 var server = new net.Server((socket) => {
+    var socket_byline = byline(socket);
     state.listeners.push(socket);
 
-    socket.on('data', (data) => {
+    socket_byline.on('data', (data) => {
         var command = JSON.parse(data.toString()) as IncomingCommand;
+        console.log(JSON.stringify(command));
         if (state.state == "setup" && command.command == "login") {
             if (contains(state.players, socket)) {
                 throw new Error("already logged in!");
@@ -70,6 +74,7 @@ var server = new net.Server((socket) => {
             };
 
             socket.write(JSON.stringify(confirmation));
+            socket.write('\n');
 
             if (state.teamNames.length == 2) {
                 console.log('game is starting now in theory');
@@ -85,7 +90,7 @@ var server = new net.Server((socket) => {
             handleDiff(diff);
         }
     });
-    socket.on('close', () => {
+    socket_byline.on('close', () => {
         throw new Error("SOCKETS CANT CLOSE");
     });
     

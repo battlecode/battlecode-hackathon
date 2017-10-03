@@ -19,6 +19,17 @@ module.exports = {
         use: 'awesome-typescript-loader?useBabel=true',
         exclude: /node_modules/
       }
+    ],
+    rules: [
+      {
+        test: /\.(png|jpg|gif)$/,
+        use: [
+          {
+            loader: 'file-loader',
+            options: {}  
+          }
+        ]
+      }
     ]
   },
 

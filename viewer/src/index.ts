@@ -1,12 +1,14 @@
 import { Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
     MeshLambertMaterial, Mesh,Vector3, PCFSoftShadowMap, AmbientLight,
-    SpotLight, SphereGeometry, BoxGeometry, EllipseCurve } from 'three';
+    SpotLight, SphereGeometry, BoxGeometry, EllipseCurve, TextureLoader} from 'three';
+
+import LogoImg from './img/Logo.png'
 
 // create a scene, that will hold all our elements such as objects, cameras and lights.
 const scene = new Scene();
 
 // create a camera, which defines where we're looking at.
-const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 
 // create a render and set the size
@@ -73,6 +75,10 @@ const spotLight = new SpotLight(0xffffff);
 spotLight.position.set(-40, 60, -10);
 spotLight.castShadow = true;
 scene.add(spotLight);
+
+var textureLoader = TextureLoader();
+
+var textureFlare = textureLoader.load(LogoImg);
 
 // add the output of the renderer to the html element
 document.body.appendChild(renderer.domElement);

@@ -1,19 +1,13 @@
-import { bees } from './bees';
-import chunk from 'lodash-es/chunk';
-//
-console.log(bees);
-console.log(chunk([1,2,3]));
 import { Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
     MeshLambertMaterial, Mesh,Vector3, PCFSoftShadowMap, AmbientLight,
     SpotLight, SphereGeometry, BoxGeometry, EllipseCurve } from 'three';
 
-
 // create a scene, that will hold all our elements such as objects, cameras and lights.
 const scene = new Scene();
-/*
 
 // create a camera, which defines where we're looking at.
 const camera = new PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+
 
 // create a render and set the size
 const renderer = new WebGLRenderer();
@@ -65,7 +59,7 @@ scene.add(sphere);
 
 // position and point the camera to the center of the scene
 camera.position.x = -25;
-camera.position.y = 30 + bees;
+camera.position.y = 30;
 camera.position.z = 25;
 camera.lookAt(new Vector3(10, 0, 0));
 
@@ -107,4 +101,3 @@ function render() {
 }
 
 render();
-*/

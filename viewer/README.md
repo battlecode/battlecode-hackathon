@@ -1,10 +1,12 @@
 # Viewer
 A light browser application using three.js, webpack, and typescript.
 
-
 ## Build process
 Uses webpack.
 Typescript compiles to es2015; in prod, es2015 is minified using babel-minify.
 
 Inspired by:
 https://github.com/blacksonic/typescript-webpack-tree-shaking
+
+Note: dead code elimination works poorly for three.js, see: https://github.com/mrdoob/three.js/issues/9403
+So bundle sizes may be large-ish (200kb gzip).

@@ -1,0 +1,29 @@
+{
+  "name": "battlecode-viewer",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "webpack-dev-server --config webpack.config.js",
+    "build": "webpack --config webpack.prod.config.js"
+  },
+  "author": "Battlecode Devs",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/lodash-es": "^4.14.7",
+    "@types/three": "^0.84.24",
+    "awesome-typescript-loader": "^3.2.3",
+    "babel-core": "^6.26.0",
+    "babel-minify-webpack-plugin": "^0.2.0",
+    "babel-preset-env": "^1.6.0",
+    "typescript": "^2.5.3",
+    "webpack": "^3.6.0",
+    "webpack-bundle-analyzer": "^2.9.0",
+    "webpack-dev-server": "^2.9.1"
+  },
+  "dependencies": {
+    "lodash-es": "^4.17.4",
+    "three": "^0.87.1"
+  }
+}

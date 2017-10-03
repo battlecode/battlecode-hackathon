@@ -13,7 +13,8 @@
       "strictNullChecks": true,
       "noImplicitAny": true
     },
-    "files": [],
+    "files": [
+    ],
     "exclude": [
       "node_modules",
       "dist"

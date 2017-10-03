@@ -1,8 +1,14 @@
+/// <reference path="./webpack.d.ts" />
+// note: above is wacky old declaration syntax used so that we can
+// import using webpack loaders
+
 import { Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
     MeshLambertMaterial, Mesh,Vector3, PCFSoftShadowMap, AmbientLight,
     SpotLight, SphereGeometry, BoxGeometry, EllipseCurve, TextureLoader} from 'three';
 
-import LogoImg from './img/Logo.png'
+import LogoImg from './img/Logo.png';
+
+console.log("img: " +LogoImg);
 
 // create a scene, that will hold all our elements such as objects, cameras and lights.
 const scene = new Scene();
@@ -76,9 +82,9 @@ spotLight.position.set(-40, 60, -10);
 spotLight.castShadow = true;
 scene.add(spotLight);
 
-var textureLoader = TextureLoader();
+var textureLoader = new TextureLoader();
 
-var textureFlare = textureLoader.load(LogoImg);
+//var textureFlare = textureLoader.load(LogoImg);
 
 // add the output of the renderer to the html element
 document.body.appendChild(renderer.domElement);

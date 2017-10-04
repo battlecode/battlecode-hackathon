@@ -4,7 +4,8 @@
 
 import { Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
     MeshLambertMaterial, Mesh,Vector3, PCFSoftShadowMap, AmbientLight,
-    SpotLight, SphereGeometry, BoxGeometry, EllipseCurve, TextureLoader} from 'three';
+    SpotLight, SphereGeometry, BoxGeometry, EllipseCurve, TextureLoader,
+    lensFlare, SpriteMaterial} from 'three';
 
 import LogoImg from './img/Logo.png';
 
@@ -41,8 +42,10 @@ scene.add(plane);
 
 // create a cube
 const cubeGeometry = new BoxGeometry(4, 4, 4);
-const cubeMaterial = new MeshLambertMaterial({color: 0xff0000});
-const cube = new Mesh(cubeGeometry, cubeMaterial);
+var textureLoader = new TextureLoader();
+var textureLogo = textureLoader.load(LogoImg);
+var logoMaterial = new SpriteMaterial( {map: textureLogo, color: 0xffffff});
+const cube = new Mesh(cubeGeometry, logoMaterial);
 cube.castShadow = true;
 
 // position the cube
@@ -82,9 +85,6 @@ spotLight.position.set(-40, 60, -10);
 spotLight.castShadow = true;
 scene.add(spotLight);
 
-var textureLoader = new TextureLoader();
-
-//var textureFlare = textureLoader.load(LogoImg);
 
 // add the output of the renderer to the html element
 document.body.appendChild(renderer.domElement);
@@ -108,7 +108,7 @@ function render() {
     sphere.position.x = 20 + ( 10 * (Math.cos(step)));
     sphere.position.y = 2 + ( 10 * Math.abs(Math.sin(step)));
     // render using requestAnimationFrame
-    requestAnimationFrame(render);
+    //requestAnimationFrame(render);
     renderer.render(scene, camera);
 }
 

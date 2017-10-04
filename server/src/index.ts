@@ -1,136 +1,138 @@
 import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, WorldData } from './schema';
 import { Game, TurnDiff } from './game';
-import * as net from 'net';
-import * as byline from 'byline';
+import { Client, ClientID } from './client';
+import * as net from "net";
+import * as ws from "ws";
 
-interface StateSetup {
-    state: "setup",
-    players: net.Socket[],
-    listeners: net.Socket[],
-    teamNames: string[]
-}
+class GameRunner {
+    listeners: Map<ClientID, Client>;
+    players: Map<ClientID, TeamID>;
+    state: { state: "setup", names: Map<ClientID, string> } | { state: "play", game: Game };
 
-interface StatePlay {
-    state: "play",
-    players: net.Socket[],
-    listeners: net.Socket[],
-    game: Game
-}
-
-type State = StateSetup | StatePlay;
-
-var state: State = {
-    state: "setup",
-    listeners: [],
-    players: [],
-    teamNames: []
-}
-
-function contains(array: any[], thing): boolean {
-    return array.indexOf(thing) !== -1;
-}
-
-function broadcast(message: OutgoingCommand) {
-    var messageString = JSON.stringify(message);
-    for (var listener of state.listeners) {
-        listener.write(messageString);
-        listener.write('\n');
+    constructor() {
+        this.listeners = new Map();
+        this.players = new Map();
+        this.state = { state: 'setup', names: new Map() };
     }
-}
 
-function handleDiff(diff: TurnDiff) {
-    broadcast({
-        command: "nextturn",
-        changed: diff.dirty,
-        dead: diff.dead,
+    addClient(client: Client) {
+        if (this.listeners.has(client.id)) {
+            throw new Error("Client already in game: "+client.id);
+        }
+        this.listeners.set(client.id, client);
+        client.onCommand(this.handleCommand.bind(this));
+        client.onClose(this.handleClose.bind(this));
+    }
 
-        successful: diff.successfulActions,
-        failed: diff.failedActions,
-        reasons: diff.reasons,
-
-        nextTeam: (state as StatePlay).game.nextTeam
-    });
-}
-
-var server = new net.Server((socket) => {
-    var socket_byline = byline(socket);
-    state.listeners.push(socket);
-
-    socket_byline.on('data', (data) => {
-        var command = JSON.parse(data.toString()) as IncomingCommand;
-        console.log(JSON.stringify(command));
-        if (state.state == "setup" && command.command == "login") {
-            if (contains(state.players, socket)) {
-                throw new Error("already logged in!");
+    handleCommand(command: IncomingCommand, client: Client) {
+        if (command.command === 'login' && this.state.state === 'setup') {
+            if (this.players.has(client.id)) {
+                throw new Error("Can't log in twice!");
             }
 
-            state.teamNames.push(command.name);
-            state.players.push(socket);
+            // simple way to assign a consecutive team to every player
+            this.players.set(client.id, this.players.size);
 
-            var confirmation: LoginConfirm = {
+            let confirmation: LoginConfirm = {
                 command: "login_confirm",
                 name: command.name,
-                id: state.teamNames.length - 1
+                id: this.players.get(client.id) as number
             };
-
-            socket.write(JSON.stringify(confirmation));
-            socket.write('\n');
-
-            if (state.teamNames.length == 2) {
-                console.log('game is starting now in theory');
-                startGame();
+        } else if (command.command === 'maketurn' && this.state.state === 'play') {
+            const teamID = this.players.get(client.id);
+            if (this.state.game.nextTeam !== teamID) {
+                throw new Error("Wrong team moved!");
             }
-        } else if (state.state == "play" && command.command == "maketurn") {
-            var team = state.players.indexOf(socket);
-            if (team !== state.game.nextTeam) {
-                throw new Error("wrong team moved");
-            }
-
-            var diff = state.game.makeTurn(team, command.actions);
-            handleDiff(diff);
+            const diff = this.state.game.makeTurn(teamID, command.actions);
+        } else {
+            throw new Error("Invalid command!");
         }
-    });
-    socket_byline.on('close', () => {
-        throw new Error("SOCKETS CANT CLOSE");
-    });
-    
-});
+    }
 
-function startGame() {
-    var loginState = state as StateSetup;
-    var world: WorldData = {
-        height: 3,
-        width: 3,
-        tiles: [
-            ['D', 'G', 'G'],
-            ['G', 'D', 'G'],
-            ['G', 'G', 'D']
-        ]
-    };
-    var teams: TeamData[] = [];
-    for (var id = 0; id < loginState.teamNames.length; id++) {
-        teams.push({
-            id: id,
-            name: loginState.teamNames[id]
+    startGame() {
+        if (this.state.state !== "setup") {
+            throw new Error("Game already running!");
+        }
+        let world: WorldData = {
+            height: 3,
+            width: 3,
+            tiles: [
+                ['D', 'G', 'G'],
+                ['G', 'D', 'G'],
+                ['G', 'G', 'D']
+            ]
+        };
+
+        let teams: TeamData[] = [];
+        for (const [clientID, teamID] of this.players) {
+            teams[teamID] = {
+                id: teamID,
+                name: this.state.names.get(clientID) as string
+            };
+        }
+
+        this.broadcast({
+            command: 'start',
+            world: world,
+            teams: teams
+        });
+        this.state = {
+            state: 'play',
+            game: new Game(world, teams)
+        }
+
+        let diff = this.state.game.addInitialEntities([
+            {id: 0, type: "thrower", location: {x:0,y:0}, team: 0, hp: 10},
+            {id: 1, type: "thrower", location: {x:2,y:2}, team: 1, hp: 10},
+        ]);
+        this.handleDiff(diff);
+    }
+
+    handleClose(client: Client) {
+        if (this.players.has(client.id)) {
+            throw new Error("Player disconnected: ");
+        }
+
+        this.listeners.delete(client.id);
+    }
+
+    broadcast(command: OutgoingCommand) {
+        this.listeners.forEach((client) => {
+            // TODO only serialize once
+            client.send(command);
         });
     }
-    broadcast({
-        command: "start",
-        world: world,
-        teams: teams
-    });
-    state = {
-        state: "play",
-        players: loginState.players,
-        listeners: loginState.listeners,
-        game: new Game(world, teams)
-    };
 
-    var diff = state.game.addInitialEntities([
-        {id: 0, type: "thrower", location: {x:0,y:0}, team: 0, hp: 10},
-        {id: 1, type: "thrower", location: {x:2,y:2}, team: 1, hp: 10},
-    ]);
-    handleDiff(diff);
+    handleDiff(diff: TurnDiff) {
+        if (this.state.state == "setup") throw new Error("Can't broadcast diff in setup");
+
+        this.broadcast({
+            command: "nextturn",
+            changed: diff.dirty,
+            dead: diff.dead,
+
+            successful: diff.successfulActions,
+            failed: diff.failedActions,
+            reasons: diff.reasons,
+
+            nextTeam: this.state.game.nextTeam
+        });
+    }
 }
 
-server.listen(6172);
+const gameRunner = new GameRunner();
+
+let tcpServer = new net.Server((socket) => {
+    gameRunner.addClient(Client.fromTCP(socket));
+});
+
+console.log('ws listening on :6173');
+let wsServer = new ws.Server({ port: 8080 });
+wsServer.on('connection', (socket) => {
+    gameRunner.addClient(Client.fromWeb(socket));
+});
+
+console.log('tcp listening on :6172');
+tcpServer.listen(6172);
+console.log('ready.');
+

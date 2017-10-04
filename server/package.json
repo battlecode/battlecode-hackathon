@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "start": "npm run build && node dist/index.js"
+    "start": "ts-node src/index.ts"
   },
   "repository": {
     "type": "git",
@@ -29,6 +29,7 @@
     "ws": "^3.2.0"
   },
   "devDependencies": {
+    "ts-node": "^3.3.0",
     "typescript": "^2.5.3"
   }
 }

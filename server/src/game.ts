@@ -1,4 +1,4 @@
-import { Action, EntityData, EntityID, Location, MapTile, TeamData, TeamID, WorldData } from './schema';
+import { Action, EntityData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
 
 var loc: Location = {
     x: 1,
@@ -28,7 +28,7 @@ function distance(a: Location, b: Location): number {
     return dx * dx + dy * dy;
 }
 
-function isOutOfBound(a: Location, world: WorldData): boolean {
+function isOutOfBound(a: Location, world: MapData): boolean {
     if(a.x >= world.width || a.x < 0) {
         return true;
     } 
@@ -49,7 +49,7 @@ const DELAYS = {
 };
 
 export class Game {
-    world: WorldData;
+    world: MapData;
     teams: TeamData[];
     entities: Map<EntityID, EntityData>;
     occupied: Map<Location, EntityID>;
@@ -58,7 +58,7 @@ export class Game {
     // ids must be consecutive
     nextTeam: TeamID;
 
-    constructor(world: WorldData, teams: TeamData[]) {
+    constructor(world: MapData, teams: TeamData[]) {
         this.turn = 0;
         this.highestId = 0;
         this.world = world;

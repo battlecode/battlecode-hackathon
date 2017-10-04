@@ -1,4 +1,4 @@
-import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, WorldData } from './schema';
+import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, MapData } from './schema';
 
 import * as net from 'net';
 import * as byline from 'byline';
@@ -61,7 +61,7 @@ export class Client {
 
     private constructor(socket: SocketEnum) {
         this.id = uuid();
-
+        this.commandCallbacks = [];
         this.socket = socket;
 
         if (this.socket.type === 'web') {

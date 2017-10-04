@@ -1,4 +1,4 @@
-import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, WorldData } from './schema';
+import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, MapData } from './schema';
 import { Game, TurnDiff } from './game';
 import { Client, ClientID } from './client';
 import * as net from "net";
@@ -32,18 +32,25 @@ class GameRunner {
 
             // simple way to assign a consecutive team to every player
             this.players.set(client.id, this.players.size);
+            this.state.names.set(client.id, command.name);
 
             let confirmation: LoginConfirm = {
                 command: "login_confirm",
                 name: command.name,
                 id: this.players.get(client.id) as number
             };
-        } else if (command.command === 'maketurn' && this.state.state === 'play') {
+            client.send(confirmation);
+
+            if (this.players.size >= 2) {
+                this.startGame();
+            }
+        } else if (command.command === 'make_turn' && this.state.state === 'play') {
             const teamID = this.players.get(client.id);
-            if (this.state.game.nextTeam !== teamID) {
-                throw new Error("Wrong team moved!");
+            if (teamID === undefined) {
+                throw new Error("non-player client can't make turn: "+client.id);
             }
             const diff = this.state.game.makeTurn(teamID, command.actions);
+            this.handleDiff(diff);
         } else {
             throw new Error("Invalid command!");
         }
@@ -53,7 +60,7 @@ class GameRunner {
         if (this.state.state !== "setup") {
             throw new Error("Game already running!");
         }
-        let world: WorldData = {
+        let map: MapData = {
             height: 3,
             width: 3,
             tiles: [
@@ -65,20 +72,24 @@ class GameRunner {
 
         let teams: TeamData[] = [];
         for (const [clientID, teamID] of this.players) {
+            const name = this.state.names.get(clientID);
+            if (name === undefined) {
+                throw new Error("Team with no name?? "+name);
+            }
             teams[teamID] = {
                 id: teamID,
-                name: this.state.names.get(clientID) as string
+                name: name
             };
         }
 
         this.broadcast({
             command: 'start',
-            world: world,
+            map: map,
             teams: teams
         });
         this.state = {
             state: 'play',
-            game: new Game(world, teams)
+            game: new Game(map, teams)
         }
 
         let diff = this.state.game.addInitialEntities([
@@ -107,7 +118,7 @@ class GameRunner {
         if (this.state.state == "setup") throw new Error("Can't broadcast diff in setup");
 
         this.broadcast({
-            command: "nextturn",
+            command: "next_turn",
             changed: diff.dirty,
             dead: diff.dead,
 
@@ -115,7 +126,7 @@ class GameRunner {
             failed: diff.failedActions,
             reasons: diff.reasons,
 
-            nextTeam: this.state.game.nextTeam
+            next_team: this.state.game.nextTeam
         });
     }
 }
@@ -123,7 +134,8 @@ class GameRunner {
 const gameRunner = new GameRunner();
 
 let tcpServer = new net.Server((socket) => {
-    gameRunner.addClient(Client.fromTCP(socket));
+    const client = Client.fromTCP(socket);
+    gameRunner.addClient(client);
 });
 
 console.log('ws listening on :6173');

@@ -21,15 +21,15 @@ export interface EntityData {
     team: TeamID;
     hp: number;
     cooldown_end?: number;
-    helpless?: boolean;
+    held_by?: boolean;
     holding?: EntityID;
     holding_end?: number;
 }
 
 /**
- * The data for the world.
+ * The data for the map.
  */
-export interface WorldData {
+export interface MapData {
     height: number;
     width: number;
     /**
@@ -67,7 +67,7 @@ export interface LoginConfirm {
  */
 export interface GameStart {
     command: "start";
-    world: WorldData;
+    map: MapData;
     teams: TeamData[];
 }
 
@@ -75,7 +75,7 @@ export interface GameStart {
  * Notifies clients about the current turn / world state.
  */
 export interface NextTurn {
-    command: "nextturn";
+    command: "next_turn";
     changed: EntityData[];
     dead: EntityID[];
 
@@ -83,14 +83,14 @@ export interface NextTurn {
     failed?: Action[];
     reasons?: string[];
 
-    nextTeam: TeamID;
+    next_team: TeamID;
     winner?: TeamID;
 }
 /**
  * Tells server to perform a list of action.
  */
 export interface MakeTurn {
-    command: "maketurn";
+    command: "make_turn";
     actions: Action[];
 }
 export interface MoveAction {

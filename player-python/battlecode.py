@@ -160,7 +160,7 @@ class Game(object):
 
         # setup connection
         self._socket = socket.socket()
-        #self._socket.settimeout(1) # second
+        self._socket.settimeout(1) # second
         self._socket.connect(server)
         self._lineio = _LineIO(self._socket)
 
@@ -217,6 +217,7 @@ class Game(object):
             if len(message) > 0:
                 break
 
+        message = message.decode('utf-8')
         result = json.loads(message)
         return result
 

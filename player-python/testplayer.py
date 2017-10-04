@@ -13,7 +13,7 @@ while rounds < 1000:
     rounds += 1
 
     for entity in game.entities.values():
-        if entity.team == game.team.id:
+        if entity.team == game.team:
             x = entity.location.x + 1
             entity.queue_move(battlecode.Location(entity.location.x + 1, entity.location.y))
 

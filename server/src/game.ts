@@ -29,16 +29,10 @@ function distance(a: Location, b: Location): number {
 }
 
 function isOutOfBound(a: Location, world: MapData): boolean {
-    if(a.x >= world.width || a.x < 0) {
-        return true;
-    } 
-    
-    if (a.y >= world.height || a.y < 0) {
-        return true;
-    }
-    
-    return false;
-
+    return a.x >= world.width ||
+           a.x < 0 ||
+           a.y >= world.height ||
+           a.y < 0;
 }
 
 const DELAYS = {
@@ -165,6 +159,7 @@ export class Game {
             if (isOutOfBound(action.loc, this.world)) {
                 diff.failedActions.push(action);
                 diff.reasons.push("Location out of bounds of world: " + action.loc);
+                return;
             }
 
             var newEntity: EntityData;

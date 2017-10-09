@@ -25,13 +25,21 @@ export interface EntityData {
     holding?: EntityID;
     holding_end?: number;
 }
-
+/**
+ * The data for a Sector
+ */
+export interface SectorData {
+    teams : Map<TeamID, Map<EntityID, EntityData>>;
+    top_left: Location;
+}
 /**
  * The data for the map.
+ * Map is partitioned into square sectors
  */
 export interface MapData {
     height: number;
     width: number;
+    sector_size: number;
     /**
      * Indexed as [y][x];
      */

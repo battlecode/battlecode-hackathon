@@ -25,20 +25,25 @@ export interface EntityData {
     holding?: EntityID;
     holding_end?: number;
 }
+
 /**
  * The data for a Sector
  */
 export interface SectorData {
-    teams : Map<TeamID, Map<EntityID, EntityData>>;
     top_left: Location;
+    controlling_team: TeamID;
 }
+
 /**
  * The data for the map.
- * Map is partitioned into square sectors
  */
 export interface MapData {
     height: number;
     width: number;
+    /**
+     * Map is partitioned into n by n square Sectors
+     * Each Sector stores Location of its top left corner and covers sector_size * sector_size area 
+     */
     sector_size: number;
     /**
      * Indexed as [y][x];
@@ -86,6 +91,7 @@ export interface NextTurn {
     command: "next_turn";
     changed: EntityData[];
     dead: EntityID[];
+    changedSectors: SectorData[];
 
     successful?: Action[];
     failed?: Action[];

@@ -8,7 +8,7 @@ var loc: Location = {
 
 export class TurnDiff {
     dirty: EntityData[];
-    sectors: Sector[];
+    changedSectors: SectorData[];
     dead: EntityID[];
     successfulActions: Action[];
     failedActions: Action[];
@@ -16,7 +16,7 @@ export class TurnDiff {
 
     constructor() {
         this.dirty = [];
-        this.sectors = [];
+        this.changedSectors = [];
         this.dead = [];
         this.successfulActions = [];
         this.failedActions = [];
@@ -75,18 +75,18 @@ export class Game {
         }
     }
 
-    addInitialEntities(entities: EntityData[]): TurnDiff {
+    addInitialEntitiesAndSectors(entities: EntityData[]): TurnDiff {
         if (this.turn !== 0) {
             throw new Error("Can't add entities except on turn 0");
         }
-        
+
         var diff = new TurnDiff();
         for (var ent of entities) {
             this.addOrUpdateEntity(ent);
             diff.dirty.push(ent);
         }
         
-        diff.sectors = Array.from(this.sectors.values());
+        diff.changedSectors = Array.from(this.sectors.values(), Sector.getSectorData);
 
         return diff;
     }
@@ -131,7 +131,8 @@ export class Game {
         }
 
         var entity = this.entities.get(id) as EntityData;
-
+        
+        // Statues do not move 
         if (entity.type == "statue") {
             var sector = this.getSector(entity.location); 
             sector.deleteStatue(entity);

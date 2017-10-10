@@ -91,7 +91,7 @@ export class Game {
         return diff;
     }
 
-    // get Sector based on location of statue
+    // get Sector based on location 
     getSector(location: Location): Sector {
         var sector_loc = {
             y: location.y - location.y % this.world.sector_size,

@@ -63,6 +63,7 @@ class GameRunner {
         let map: MapData = {
             height: 3,
             width: 3,
+            sector_size: 1,
             tiles: [
                 ['D', 'G', 'G'],
                 ['G', 'D', 'G'],

@@ -1,5 +1,4 @@
-import { Action, EntityData, SectorData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
-import { Sector } from './zone';
+import { Action, EntityData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
 
 var loc: Location = {
     x: 1,
@@ -8,7 +7,6 @@ var loc: Location = {
 
 export class TurnDiff {
     dirty: EntityData[];
-    sectors: Sector[];
     dead: EntityID[];
     successfulActions: Action[];
     failedActions: Action[];
@@ -16,7 +14,6 @@ export class TurnDiff {
 
     constructor() {
         this.dirty = [];
-        this.sectors = [];
         this.dead = [];
         this.successfulActions = [];
         this.failedActions = [];
@@ -50,7 +47,6 @@ export class Game {
     teams: TeamData[];
     entities: Map<EntityID, EntityData>;
     occupied: Map<Location, EntityID>;
-    sectors: Map<Location, Sector>;
     turn: number;
     highestId: number;
     // ids must be consecutive
@@ -64,44 +60,19 @@ export class Game {
         this.nextTeam = teams[0].id;
         this.entities = new Map();
         this.occupied = new Map();
-        this.sectors = new Map();
-
-        for(var y: number = 0; y < this.world.height; y += this.world.sector_size) {
-            for (var x: number = 0; x < this.world.width; x += this.world.sector_size) {
-                var top_left : Location = {y: y, x: x};
-                var sector = new Sector(top_left); 
-                this.sectors.set(top_left, sector);
-            }
-        }
     }
 
     addInitialEntities(entities: EntityData[]): TurnDiff {
         if (this.turn !== 0) {
             throw new Error("Can't add entities except on turn 0");
         }
-        
+
         var diff = new TurnDiff();
         for (var ent of entities) {
             this.addOrUpdateEntity(ent);
             diff.dirty.push(ent);
         }
-        
-        diff.sectors = Array.from(this.sectors.values());
-
         return diff;
-    }
-
-    // get Sector based on location of statue
-    getSector(location: Location): Sector {
-        var sector_loc = {
-            y: location.y - location.y % this.world.sector_size,
-            x: location.x - location.x % this.world.sector_size
-        }
-        var sector = this.sectors.get(sector_loc);
-        if (!sector) {
-            throw new Error("sector does not exist: "+location);
-        }
-        return sector;
     }
 
     addOrUpdateEntity(entity: EntityData) {
@@ -112,11 +83,6 @@ export class Game {
         if (this.entities.has(entity.id)) {
             var old = this.entities.get(entity.id) as EntityData;
             this.occupied.delete(old.location);
-        }
-        
-        if (entity.type == "statue") {
-            var sector = this.getSector(entity.location);
-            sector.addStatue(entity);
         }
 
         this.entities.set(entity.id, entity);
@@ -131,17 +97,10 @@ export class Game {
         }
 
         var entity = this.entities.get(id) as EntityData;
-
-        if (entity.type == "statue") {
-            var sector = this.getSector(entity.location); 
-            sector.deleteStatue(entity);
-        }
-
         this.entities.delete(id);
         this.occupied.delete(entity.location);
     }
 
-    // TODO: implement spawning mechanic 
     makeTurn(team: TeamID, actions: Action[]): TurnDiff {
         if (team !== this.nextTeam) {
             throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);

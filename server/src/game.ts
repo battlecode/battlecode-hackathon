@@ -91,7 +91,9 @@ export class Game {
         return diff;
     }
 
-    // get Sector based on location 
+    /**
+     * returns Sector based on location
+     */  
     getSector(location: Location): Sector {
         var sector_loc = {
             y: location.y - location.y % this.world.sector_size,
@@ -177,6 +179,9 @@ export class Game {
         return changedSectors
     }
 
+    /**
+     * Returns EntityData[] of throwers to be spawned in controlled sectors
+     */
     getNewThrowers(): EntityData[] {
         var throwers: EntityData[] = []
         for (var sector of this.sectors.values()) {

@@ -82,10 +82,10 @@ export class Game {
 
         var diff = new TurnDiff();
         for (var ent of entities) {
-            this.addOrUpdateEntity(ent);
+            this.addOrUpdateEntity(ent); 
             diff.dirty.push(ent);
         }
-        
+
         diff.changedSectors = Array.from(this.sectors.values(), Sector.getSectorData);
 
         return diff;
@@ -142,7 +142,6 @@ export class Game {
         this.occupied.delete(entity.location);
     }
 
-    // TODO: implement spawning mechanic 
     makeTurn(team: TeamID, actions: Action[]): TurnDiff {
         if (team !== this.nextTeam) {
             throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);
@@ -154,7 +153,47 @@ export class Game {
         for (var i = 0; i < actions.length; i++) {
             this.doAction(team, diff, actions[i]);
         }
+
+        // spawn throwers from controlled sectors every 10 turns
+        if (this.turn % 10 == 0) {
+            var throwers = this.getNewThrowers();
+            for (var thrower of throwers) {
+                this.addOrUpdateEntity(thrower);
+                diff.dirty.push(thrower);
+            }
+        }
+
+        diff.changedSectors = this.getChangedSectors();
         return diff;
+    }
+
+    getChangedSectors(): SectorData[] {
+        var changedSectors: SectorData[] = []; 
+        for (var sector of this.sectors.values()) {
+            if (sector.setHasChanged()) {
+                changedSectors.push(Sector.getSectorData(sector))
+            }
+        }
+        return changedSectors
+    }
+
+    getNewThrowers(): EntityData[] {
+        var throwers: EntityData[] = []
+        for (var sector of this.sectors.values()) {
+            var statue = this.entities.get(sector.getSpawningStatueID())
+            // if statue exists in game  
+            if (statue) {
+                var newThrower: EntityData = {
+                    id: this.highestId + 1,
+                    type: "thrower",
+                    location: statue.location,
+                    team: statue.team,
+                    hp: 10
+                };
+                throwers.push(newThrower);
+            }
+        }
+        return throwers; 
     }
 
     doAction(team: TeamID, diff: TurnDiff, action: Action) {

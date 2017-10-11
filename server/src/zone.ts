@@ -3,10 +3,14 @@ import { SectorData, EntityID, EntityData, TeamID, Location } from './schema';
 export class Sector{
     teams: Map<TeamID, EntityID[]>;
     top_left: Location;
+    controlling_team: TeamID;
+    hasChanged: boolean;
 
     constructor(top_left : Location) {
        this.teams = new Map();
        this.top_left = top_left;
+       this.controlling_team = -1;
+       this.hasChanged = false;
     }
 
     /**
@@ -33,6 +37,7 @@ export class Sector{
            throw new Error("Statue already exists in Sector"+statue.id);
        }
        team.push(statue.id);
+       this.updateControllingTeam();
     }
 
     deleteStatue(statue: EntityData) {
@@ -42,6 +47,7 @@ export class Sector{
             throw new Error("Can't delete nonexistent statue from sector"+statue.id);
         }
         team.splice(index, 1);
+        this.updateControllingTeam();
     }
 
     /**
@@ -62,6 +68,25 @@ export class Sector{
             }
         }
         return control;
+    }
+    
+    updateControllingTeam() {
+        var new_controlling_team = this.getControllingTeamID()
+        if (this.controlling_team != new_controlling_team) {
+            this.controlling_team = new_controlling_team;
+            this.hasChanged = true;
+        }
+    }
+
+    /**
+     * returns true when team controlling sector changes 
+     */
+    setHasChanged(): boolean {
+        if (this.hasChanged) {
+            this.hasChanged = false;
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -86,14 +111,13 @@ export class Sector{
     * returns id of spawning statue from controlling team or -1 if no team controlling
     */
     getSpawningStatueID(): EntityID {
-        var team = this.getControllingTeamID();
-        return this.getOldestStatueID(team);
+        return this.getOldestStatueID(this.controlling_team);
     }
 
     static getSectorData(sector: Sector): SectorData {
         var data: SectorData = {
             top_left: sector.top_left,
-            controlling_team: sector.getControllingTeamID()
+            controlling_team: sector.controlling_team
         }
         return data
     }

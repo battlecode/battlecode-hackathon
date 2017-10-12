@@ -63,6 +63,7 @@ class GameRunner {
         let map: MapData = {
             height: 3,
             width: 3,
+            sector_size: 1,
             tiles: [
                 ['D', 'G', 'G'],
                 ['G', 'D', 'G'],
@@ -92,7 +93,7 @@ class GameRunner {
             game: new Game(map, teams)
         }
 
-        let diff = this.state.game.addInitialEntities([
+        let diff = this.state.game.addInitialEntitiesAndSectors([
             {id: 0, type: "thrower", location: {x:0,y:0}, team: 0, hp: 10},
             {id: 1, type: "thrower", location: {x:2,y:2}, team: 1, hp: 10},
         ]);
@@ -120,6 +121,7 @@ class GameRunner {
         this.broadcast({
             command: "next_turn",
             changed: diff.dirty,
+            changedSectors: diff.changedSectors,
             dead: diff.dead,
 
             successful: diff.successfulActions,

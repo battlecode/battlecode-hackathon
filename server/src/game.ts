@@ -1,4 +1,5 @@
-import { Action, EntityData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
+import { Action, EntityData, SectorData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
+import { Sector } from './zone';
 
 var loc: Location = {
     x: 1,
@@ -7,6 +8,7 @@ var loc: Location = {
 
 export class TurnDiff {
     dirty: EntityData[];
+    changedSectors: SectorData[];
     dead: EntityID[];
     successfulActions: Action[];
     failedActions: Action[];
@@ -14,6 +16,7 @@ export class TurnDiff {
 
     constructor() {
         this.dirty = [];
+        this.changedSectors = [];
         this.dead = [];
         this.successfulActions = [];
         this.failedActions = [];
@@ -47,6 +50,7 @@ export class Game {
     teams: TeamData[];
     entities: Map<EntityID, EntityData>;
     occupied: Map<Location, EntityID>;
+    sectors: Map<Location, Sector>;
     turn: number;
     highestId: number;
     // ids must be consecutive
@@ -60,19 +64,46 @@ export class Game {
         this.nextTeam = teams[0].id;
         this.entities = new Map();
         this.occupied = new Map();
+        this.sectors = new Map();
+
+        for(var y: number = 0; y < this.world.height; y += this.world.sector_size) {
+            for (var x: number = 0; x < this.world.width; x += this.world.sector_size) {
+                var top_left : Location = {y: y, x: x};
+                var sector = new Sector(top_left); 
+                this.sectors.set(top_left, sector);
+            }
+        }
     }
 
-    addInitialEntities(entities: EntityData[]): TurnDiff {
+    addInitialEntitiesAndSectors(entities: EntityData[]): TurnDiff {
         if (this.turn !== 0) {
             throw new Error("Can't add entities except on turn 0");
         }
 
         var diff = new TurnDiff();
         for (var ent of entities) {
-            this.addOrUpdateEntity(ent);
+            this.addOrUpdateEntity(ent); 
             diff.dirty.push(ent);
         }
+
+        diff.changedSectors = Array.from(this.sectors.values(), Sector.getSectorData);
+
         return diff;
+    }
+
+    /**
+     * returns Sector based on location
+     */  
+    getSector(location: Location): Sector {
+        var sector_loc = {
+            y: location.y - location.y % this.world.sector_size,
+            x: location.x - location.x % this.world.sector_size
+        }
+        var sector = this.sectors.get(sector_loc);
+        if (!sector) {
+            throw new Error("sector does not exist: "+location);
+        }
+        return sector;
     }
 
     addOrUpdateEntity(entity: EntityData) {
@@ -83,6 +114,11 @@ export class Game {
         if (this.entities.has(entity.id)) {
             var old = this.entities.get(entity.id) as EntityData;
             this.occupied.delete(old.location);
+        }
+        
+        if (entity.type == "statue") {
+            var sector = this.getSector(entity.location);
+            sector.addStatue(entity);
         }
 
         this.entities.set(entity.id, entity);
@@ -97,6 +133,13 @@ export class Game {
         }
 
         var entity = this.entities.get(id) as EntityData;
+        
+        // Statues do not move 
+        if (entity.type == "statue") {
+            var sector = this.getSector(entity.location); 
+            sector.deleteStatue(entity);
+        }
+
         this.entities.delete(id);
         this.occupied.delete(entity.location);
     }
@@ -112,7 +155,50 @@ export class Game {
         for (var i = 0; i < actions.length; i++) {
             this.doAction(team, diff, actions[i]);
         }
+
+        // spawn throwers from controlled sectors every 10 turns
+        if (this.turn % 10 == 0) {
+            var throwers = this.getNewThrowers();
+            for (var thrower of throwers) {
+                this.addOrUpdateEntity(thrower);
+                diff.dirty.push(thrower);
+            }
+        }
+
+        diff.changedSectors = this.getChangedSectors();
         return diff;
+    }
+
+    getChangedSectors(): SectorData[] {
+        var changedSectors: SectorData[] = []; 
+        for (var sector of this.sectors.values()) {
+            if (sector.checkChanged()) {
+                changedSectors.push(Sector.getSectorData(sector))
+            }
+        }
+        return changedSectors
+    }
+
+    /**
+     * Returns EntityData[] of throwers to be spawned in controlled sectors
+     */
+    getNewThrowers(): EntityData[] {
+        var throwers: EntityData[] = []
+        for (var sector of this.sectors.values()) {
+            var statue = this.entities.get(sector.getSpawningStatueID())
+            // if statue exists in game  
+            if (statue) {
+                var newThrower: EntityData = {
+                    id: this.highestId + 1,
+                    type: "thrower",
+                    location: statue.location,
+                    team: statue.team,
+                    hp: 10
+                };
+                throwers.push(newThrower);
+            }
+        }
+        return throwers; 
     }
 
     doAction(team: TeamID, diff: TurnDiff, action: Action) {

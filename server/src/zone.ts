@@ -14,7 +14,7 @@ export class Sector{
     }
 
     /**
-    * Get or create new [] of statues if team does not exist in teams
+    * Get or create new EntityID[] of statues if team does not exist in teams
     */
     getOrCreateTeam(team : TeamID): EntityID[]{
         if (!this.teams.has(team)) {
@@ -51,7 +51,7 @@ export class Sector{
     }
 
     /**
-    *returns id of team controlling sector or -1 if no team controlling
+    * returns id of team controlling sector or -1 if no team controlling
     */
     getControllingTeamID(): TeamID {
         var control = -1;
@@ -81,7 +81,7 @@ export class Sector{
     /**
      * returns true when team controlling sector changes 
      */
-    setHasChanged(): boolean {
+    checkChanged(): boolean {
         if (this.hasChanged) {
             this.hasChanged = false;
             return true;

@@ -172,7 +172,7 @@ export class Game {
     getChangedSectors(): SectorData[] {
         var changedSectors: SectorData[] = []; 
         for (var sector of this.sectors.values()) {
-            if (sector.setHasChanged()) {
+            if (sector.checkChanged()) {
                 changedSectors.push(Sector.getSectorData(sector))
             }
         }

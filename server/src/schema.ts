@@ -1,5 +1,9 @@
-
 export type EntityID = number;
+
+/**
+ * The ID of a team.
+ * TeamID 0 is always the ID of the non-player team (i.e. the team of hedges).
+ */
 export type TeamID = number;
 
 export interface Location {
@@ -18,8 +22,8 @@ export interface EntityData {
     id: EntityID;
     type: EntityType;
     location: Location;
-    team: TeamID;
     hp: number;
+    team: TeamID;
     cooldown_end?: number;
     held_by?: boolean;
     holding?: EntityID;
@@ -50,12 +54,21 @@ export interface MapData {
      */
     tiles: MapTile[][];
 }
+
 /**
  * Team data.
  */
 export interface TeamData {
     id: TeamID;
     name: string;
+}
+
+/**
+ * The neutral team.
+ */
+export const NEUTRAL_TEAM: TeamData = {
+    id: 0,
+    name: 'neutral'
 }
 
 /**

@@ -1,10 +1,6 @@
-import { Action, EntityData, SectorData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
+import { Action, EntityData, SectorData, EntityID,
+       Location, MapTile, TeamData, TeamID, MapData, NEUTRAL_TEAM } from './schema';
 import { Sector } from './zone';
-
-var loc: Location = {
-    x: 1,
-    y: 2
-};
 
 export class TurnDiff {
     dirty: EntityData[];
@@ -57,18 +53,19 @@ export class Game {
     nextTeam: TeamID;
 
     constructor(world: MapData, teams: TeamData[]) {
+        validateTeams(teams);
         this.turn = 0;
         this.highestId = 0;
         this.world = world;
         this.teams = teams;
-        this.nextTeam = teams[0].id;
+        this.nextTeam = teams[1].id;
         this.entities = new Map();
         this.occupied = new Map();
         this.sectors = new Map();
 
         for(var y: number = 0; y < this.world.height; y += this.world.sector_size) {
             for (var x: number = 0; x < this.world.width; x += this.world.sector_size) {
-                var top_left : Location = {y: y, x: x};
+                var top_left: Location = {y: y, x: x};
                 var sector = new Sector(top_left); 
                 this.sectors.set(top_left, sector);
             }
@@ -148,7 +145,12 @@ export class Game {
         if (team !== this.nextTeam) {
             throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
-        this.nextTeam = (this.nextTeam + 1) % this.teams.length;
+        // we never want to give the neutral team a turn
+        if (this.nextTeam == this.teams.length - 1) {
+            this.nextTeam = 1;
+        } else {
+            this.nextTeam++;
+        }
         this.turn++;
 
         var diff = new TurnDiff();
@@ -265,7 +267,16 @@ export class Game {
             diff.successfulActions.push(action);
             diff.dirty.push(newEntity);
         }
-
     }
-
 }
+
+const validateTeams = (teams: TeamData[]) => {
+    if (teams[0] !== NEUTRAL_TEAM) {
+        throw new Error("neutral team is not first!");
+    }
+    for (let i = 1; i < teams.length; i++) {
+        if (teams[i].id != i) {
+            throw new Error("invalid team data list");
+        }
+    }
+};

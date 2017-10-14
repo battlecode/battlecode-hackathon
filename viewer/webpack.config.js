@@ -1,4 +1,4 @@
-var path = require('path');
+const path = require('path');
 
 module.exports = {
   entry: {
@@ -11,16 +11,20 @@ module.exports = {
     filename: '[name].bundle.js'
   },
 
-
   module: {
     loaders: [
       {
         test: /\.ts$/,
-        use: 'awesome-typescript-loader?useBabel=true',
+        use: [
+          {
+            loader: 'babel-loader',
+          },
+          {
+            loader: 'ts-loader',
+          }
+        ],
         exclude: /node_modules/
-      }
-    ],
-    rules: [
+      },
       {
         test: /\.(png|jpg|gif)$/,
         use: [
@@ -35,10 +39,12 @@ module.exports = {
 
   resolve: {
     extensions: ['.ts', '.js'],
-    //alias: {
-    //  'three': path.join(__dirname, 'node_modules/three/build/three.module.js')
-    //}
+    alias: {
+      'three': path.join(__dirname, 'node_modules/three/build/three.module.js')
+    }
   },
+
+  plugins: [],
 
   devtool: 'source-map'
 };

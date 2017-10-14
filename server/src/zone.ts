@@ -6,7 +6,7 @@ export class Sector{
     controlling_team: TeamID;
     hasChanged: boolean;
 
-    constructor(top_left : Location) {
+    constructor(top_left: Location) {
        this.teams = new Map();
        this.top_left = top_left;
        this.controlling_team = -1;
@@ -16,14 +16,14 @@ export class Sector{
     /**
     * Get or create new EntityID[] of statues if team does not exist in teams
     */
-    getOrCreateTeam(team : TeamID): EntityID[]{
+    getOrCreateTeam(team: TeamID): EntityID[]{
         if (!this.teams.has(team)) {
             this.teams.set(team, []);
         }
         return this.teams.get(team) as EntityID[];
     }
 
-    getTeam(id : TeamID){
+    getTeam(id: TeamID){
         var team = this.teams.get(id);
         if (!team) {
             throw new Error("Nonexistent team in sector"+id);
@@ -93,7 +93,7 @@ export class Sector{
     * returns id of oldest statue from team, or -1 if no statue exists
     * oldest statue is statue with lowest id 
     */
-    getOldestStatueID(team : TeamID): EntityID {
+    getOldestStatueID(team: TeamID): EntityID {
         var oldest: EntityID = -1; 
         if (!this.teams.has(team)) {
             return oldest;

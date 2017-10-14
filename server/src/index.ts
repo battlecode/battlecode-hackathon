@@ -5,6 +5,7 @@ import {
     MapData,
     MapTile,
     NextTurn,
+    NEUTRAL_TEAM,
     OutgoingCommand,
     TeamData,
     TeamID,
@@ -26,16 +27,16 @@ const DEFAULT_ENTITIES: EntityData[] = [
     {id: 2, type: "hedge", location: {x: 1, y: 1}, team: 0, hp: 100},
     {id: 3, type: "hedge", location: {x: 18, y: 18}, team: 0, hp: 100},
 ];
-
 class GameRunner {
     listeners: Map<ClientID, Client>;
     players: Map<ClientID, TeamID>;
-    state: { state: "setup", names: Map<ClientID, string> } | { state: "play", game: Game };
+    state: { state: "setup", teams: Map<ClientID, TeamData>, nextTeamID: number } |
+           { state: "play", game: Game };
 
     constructor() {
         this.listeners = new Map();
         this.players = new Map();
-        this.state = { state: 'setup', names: new Map() };
+        this.state = { state: 'setup', teams: new Map(), nextTeamID: 1 };
     }
 
     addClient(client: Client) {
@@ -56,7 +57,11 @@ class GameRunner {
 
             // simple way to assign a consecutive team to every player
             this.players.set(client.id, this.players.size);
-            this.state.names.set(client.id, command.name);
+            this.state.teams.set(client.id, {
+                id: this.state.nextTeamID,
+                name: command.name
+            });
+            this.state.nextTeamID++;
 
             let confirmation: LoginConfirm = {
                 command: "login_confirm",
@@ -85,17 +90,10 @@ class GameRunner {
             throw new Error("Game already running!");
         }
 
-        let teams: TeamData[] = [];
-        for (const [clientID, teamID] of this.players) {
-            const name = this.state.names.get(clientID);
-            if (name === undefined) {
-                throw new Error("Team with no name?? "+name);
-            }
-            teams[teamID] = {
-                id: teamID,
-                name: name
-            };
-        }
+        let teams: TeamData[] = Array.from(this.state.teams.values());
+        // add the neutral team
+        teams.push(NEUTRAL_TEAM);
+        teams.sort((a,b) => a.id - b.id);
 
         this.broadcast({
             command: 'start',

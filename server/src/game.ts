@@ -1,4 +1,5 @@
-import { Action, EntityData, SectorData, EntityID, Location, MapTile, TeamData, TeamID, MapData } from './schema';
+import { Action, EntityData, SectorData, EntityID, NextTurn,
+    Location, MapTile, TeamData, TeamID, MapData } from './schema';
 import { Sector } from './zone';
 
 var loc: Location = {
@@ -6,23 +7,17 @@ var loc: Location = {
     y: 2
 };
 
-export class TurnDiff {
-    dirty: EntityData[];
-    changedSectors: SectorData[];
-    dead: EntityID[];
-    successfulActions: Action[];
-    failedActions: Action[];
-    reasons: string[];
-
-    constructor() {
-        this.dirty = [];
-        this.changedSectors = [];
-        this.dead = [];
-        this.successfulActions = [];
-        this.failedActions = [];
-        this.reasons = [];
-    }
-
+function makeNextTurn(): NextTurn {
+    return {
+        command: "next_turn",
+        changed: [],
+        dead: [],
+        changed_sectors: [],
+        successful: [],
+        failed: [],
+        reasons: [],
+        next_team: 0
+    };
 }
 
 function distance(a: Location, b: Location): number {
@@ -75,18 +70,18 @@ export class Game {
         }
     }
 
-    addInitialEntitiesAndSectors(entities: EntityData[]): TurnDiff {
+    addInitialEntitiesAndSectors(entities: EntityData[]): NextTurn {
         if (this.turn !== 0) {
             throw new Error("Can't add entities except on turn 0");
         }
 
-        var diff = new TurnDiff();
+        var diff = makeNextTurn();
         for (var ent of entities) {
             this.addOrUpdateEntity(ent); 
-            diff.dirty.push(ent);
+            diff.changed.push(ent);
         }
 
-        diff.changedSectors = Array.from(this.sectors.values(), Sector.getSectorData);
+        diff.changed_sectors = Array.from(this.sectors.values(), Sector.getSectorData);
 
         return diff;
     }
@@ -144,14 +139,14 @@ export class Game {
         this.occupied.delete(entity.location);
     }
 
-    makeTurn(team: TeamID, actions: Action[]): TurnDiff {
+    makeTurn(team: TeamID, actions: Action[]): NextTurn {
         if (team !== this.nextTeam) {
             throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
         this.nextTeam = (this.nextTeam + 1) % this.teams.length;
         this.turn++;
 
-        var diff = new TurnDiff();
+        var diff = makeNextTurn();
         for (var i = 0; i < actions.length; i++) {
             this.doAction(team, diff, actions[i]);
         }
@@ -161,11 +156,11 @@ export class Game {
             var throwers = this.getNewThrowers();
             for (var thrower of throwers) {
                 this.addOrUpdateEntity(thrower);
-                diff.dirty.push(thrower);
+                diff.changed.push(thrower);
             }
         }
 
-        diff.changedSectors = this.getChangedSectors();
+        diff.changed_sectors = this.getChangedSectors();
         return diff;
     }
 
@@ -201,17 +196,17 @@ export class Game {
         return throwers; 
     }
 
-    doAction(team: TeamID, diff: TurnDiff, action: Action) {
+    doAction(team: TeamID, diff: NextTurn, action: Action) {
         var entity = this.entities.get(action.id);
 
         if (!entity) {
-            diff.failedActions.push(action);
+            diff.failed.push(action);
             diff.reasons.push("no such entity: "+action.id);
             return;
         }
 
         if (entity.team !== team) {
-            diff.failedActions.push(action);
+            diff.failed.push(action);
             diff.reasons.push("wrong team: "+entity.team);
         }
 
@@ -219,31 +214,31 @@ export class Game {
             this.deleteEntity(action.id);
 
             diff.dead.push(entity.id);
-            diff.successfulActions.push(action);
+            diff.successful.push(action);
             return;
         }
 
         if (entity.cooldown_end !== undefined && entity.cooldown_end > this.turn) {
-            diff.failedActions.push(action);
+            diff.failed.push(action);
             diff.reasons.push("Entity still on cool down: " + entity.id);
             return;
         }
 
         if (action.action === "move" || action.action === "build") {
             if (distance(entity.location, action.loc) > 2) {
-                diff.failedActions.push(action);
+                diff.failed.push(action);
                 diff.reasons.push("Distance too far: old: " + entity.location + " new: " + action.loc);
                 return;
             }
 
             if (this.occupied.has(action.loc)) {
-                diff.failedActions.push(action);
+                diff.failed.push(action);
                 diff.reasons.push("Location already occupied: " + action.loc);
                 return;
             }
 
             if (isOutOfBound(action.loc, this.world)) {
-                diff.failedActions.push(action);
+                diff.failed.push(action);
                 diff.reasons.push("Location out of bounds of world: " + action.loc);
                 return;
             }
@@ -262,10 +257,8 @@ export class Game {
                 };
             }
             this.addOrUpdateEntity(newEntity);
-            diff.successfulActions.push(action);
-            diff.dirty.push(newEntity);
+            diff.successful.push(action);
+            diff.changed.push(newEntity);
         }
-
     }
-
 }

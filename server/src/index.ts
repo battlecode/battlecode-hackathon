@@ -1,8 +1,31 @@
-import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, MapData } from './schema';
-import { Game, TurnDiff } from './game';
+import {
+    EntityData,
+    IncomingCommand,
+    LoginConfirm,
+    MapData,
+    MapTile,
+    NextTurn,
+    OutgoingCommand,
+    TeamData,
+    TeamID,
+} from './schema';
+import { Game } from './game';
 import { Client, ClientID } from './client';
-import * as net from "net";
-import * as ws from "ws";
+import * as net from 'net';
+import * as ws from 'ws';
+
+const DEFAULT_MAP: MapData = {
+    height: 20,
+    width: 20,
+    tiles: Array(20).fill(Array(20).fill('G')),
+    sector_size: 10,
+};
+const DEFAULT_ENTITIES: EntityData[] = [
+    {id: 0, type: "thrower", location: {x:0,y:0}, team: 1, hp: 10},
+    {id: 1, type: "thrower", location: {x:19,y:19}, team: 2, hp: 10},
+    {id: 2, type: "hedge", location: {x: 1, y: 1}, team: 0, hp: 100},
+    {id: 3, type: "hedge", location: {x: 18, y: 18}, team: 0, hp: 100},
+];
 
 class GameRunner {
     listeners: Map<ClientID, Client>;
@@ -25,6 +48,7 @@ class GameRunner {
     }
 
     handleCommand(command: IncomingCommand, client: Client) {
+        console.log(command);
         if (command.command === 'login' && this.state.state === 'setup') {
             if (this.players.has(client.id)) {
                 throw new Error("Can't log in twice!");
@@ -60,16 +84,6 @@ class GameRunner {
         if (this.state.state !== "setup") {
             throw new Error("Game already running!");
         }
-        let map: MapData = {
-            height: 3,
-            width: 3,
-            sector_size: 1,
-            tiles: [
-                ['D', 'G', 'G'],
-                ['G', 'D', 'G'],
-                ['G', 'G', 'D']
-            ]
-        };
 
         let teams: TeamData[] = [];
         for (const [clientID, teamID] of this.players) {
@@ -85,17 +99,15 @@ class GameRunner {
 
         this.broadcast({
             command: 'start',
-            map: map,
+            map: DEFAULT_MAP,
             teams: teams
         });
         this.state = {
             state: 'play',
-            game: new Game(map, teams)
+            game: new Game(DEFAULT_MAP, teams)
         }
 
         let diff = this.state.game.addInitialEntitiesAndSectors([
-            {id: 0, type: "thrower", location: {x:0,y:0}, team: 0, hp: 10},
-            {id: 1, type: "thrower", location: {x:2,y:2}, team: 1, hp: 10},
         ]);
         this.handleDiff(diff);
     }
@@ -115,21 +127,10 @@ class GameRunner {
         });
     }
 
-    handleDiff(diff: TurnDiff) {
+    handleDiff(diff: NextTurn) {
         if (this.state.state == "setup") throw new Error("Can't broadcast diff in setup");
 
-        this.broadcast({
-            command: "next_turn",
-            changed: diff.dirty,
-            changedSectors: diff.changedSectors,
-            dead: diff.dead,
-
-            successful: diff.successfulActions,
-            failed: diff.failedActions,
-            reasons: diff.reasons,
-
-            next_team: this.state.game.nextTeam
-        });
+        this.broadcast(diff);
     }
 }
 

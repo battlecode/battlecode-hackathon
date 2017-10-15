@@ -114,10 +114,11 @@ class Location(object):
 
 class Map(object):
     '''A game map.'''
-    def __init__(self, height, width, tiles):
+    def __init__(self, height, width, tiles, sector_size):
         self.height = height
         self.width = width
         self.tiles = tiles
+        self.sector_size = sector_size
     
     def tile_at(self, location):
         '''Get the tile at a location.'''
@@ -185,6 +186,9 @@ class Game(object):
         for team in start['teams']:
             team = Team(**team)
             self.teams[team.id] = team
+
+        print(self.teams)
+        print(team_id)
 
         self.team = self.teams[team_id]
 

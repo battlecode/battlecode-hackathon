@@ -91,11 +91,11 @@ export interface NextTurn {
     command: "next_turn";
     changed: EntityData[];
     dead: EntityID[];
-    changedSectors: SectorData[];
+    changed_sectors: SectorData[];
 
-    successful?: Action[];
-    failed?: Action[];
-    reasons?: string[];
+    successful: Action[];
+    failed: Action[];
+    reasons: string[];
 
     next_team: TeamID;
     winner?: TeamID;

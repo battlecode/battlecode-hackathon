@@ -104,7 +104,8 @@ export class Client {
             this.socket.tcp.write(JSON.stringify(command));
             this.socket.tcp.write('\n');
         } else {
-            this.socket.web.send(JSON.stringify(command));
+            // ws serializes message for us
+            this.socket.web.send(command);
         }
     }
 

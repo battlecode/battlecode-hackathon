@@ -4,6 +4,7 @@ import socket
 import json
 import math
 import io
+import time
 
 # pylint: disable = too-many-instance-attributes, invalid-name, W0622, W0212
 
@@ -110,6 +111,9 @@ class Location(object):
     def __str__(self):
         return '<{},{}>'.format(self.x, self.y)
 
+    def __repr__(self):
+        return str(self)
+
     # TODO: more methods
 
 class Map(object):
@@ -137,6 +141,9 @@ class Team(object):
     def __str__(self):
         return '<team "{}" ({})>'.format(self.name, self.id)
 
+    def __repr__(self):
+        return str(self)
+
 class _LineIO(io.RawIOBase):
     '''Magic class to split an input socket into lines.'''
     def __init__(self, sock):
@@ -161,7 +168,7 @@ class Game(object):
 
         # setup connection
         self._socket = socket.socket()
-        self._socket.settimeout(1) # second
+        #self._socket.settimeout(1) # second
         self._socket.connect(server)
         self._lineio = _LineIO(self._socket)
 
@@ -186,9 +193,6 @@ class Game(object):
         for team in start['teams']:
             team = Team(**team)
             self.teams[team.id] = team
-
-        print(self.teams)
-        print(team_id)
 
         self.team = self.teams[team_id]
 
@@ -220,6 +224,11 @@ class Game(object):
             message = self._lineio.readline()
             if len(message) > 0:
                 break
+            # TODO: this is VERY WRONG
+            # we should write our own newline parsing instead of using the jank
+            # newline thing we're doing now
+            # this library really likes to spin forever
+            time.sleep(.1)
 
         message = message.decode('utf-8')
         result = json.loads(message)

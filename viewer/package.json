@@ -22,9 +22,13 @@
     "webpack-dev-server": "^2.9.1"
   },
   "dependencies": {
+    "@types/reconnectingwebsocket": "^1.0.1",
     "babel-core": "^6.26.0",
+    "babel-minify-webpack-plugin": "^0.2.0",
     "babel-preset-env": "^1.6.0",
     "lodash-es": "^4.17.4",
+    "reconnectingwebsocket": "^1.0.0",
+    "stats.js": "^0.17.0",
     "three": "^0.87.1"
   }
 }

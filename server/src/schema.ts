@@ -40,17 +40,23 @@ export interface SectorData {
 
 /**
  * The data for the map.
+ * 
+ * Coordinate system: 
  */
 export interface MapData {
     height: number;
     width: number;
     /**
-     * Map is partitioned into n by n square Sectors
+     * Map is partitioned into square Sectors
      * Each Sector stores Location of its top left corner and covers sector_size * sector_size area 
      */
     sector_size: number;
     /**
-     * Indexed as [y][x];
+     * Slightly wacky indexing:
+     * Indexed as [height - (y + 1)][x];
+     * This allows a list of tiles to be written out in a text file
+     * such that their lower left corner will be placed at (0,0),
+     * up is y, and right is x.
      */
     tiles: MapTile[][];
 }

@@ -1,115 +1,118 @@
-/// <reference path="./webpack.d.ts" />
+/// <reference path="./declarations.d.ts" />
 // note: above is wacky old declaration syntax used so that we can
 // import using webpack loaders
 
-import { Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
-    MeshLambertMaterial, Mesh,Vector3, PCFSoftShadowMap, AmbientLight,
-    SpotLight, SphereGeometry, BoxGeometry, EllipseCurve, TextureLoader,
-    lensFlare, SpriteMaterial} from 'three';
+import * as schema from './schema';
 
-import LogoImg from './img/Logo.png';
+import Renderer from './renderer';
 
-console.log("img: " +LogoImg);
+import ReconnectingWebSocket from 'reconnectingwebsocket';
 
-// create a scene, that will hold all our elements such as objects, cameras and lights.
-const scene = new Scene();
+import Stats from 'stats.js';
 
-// create a camera, which defines where we're looking at.
-const camera = new PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
+let renderer: Renderer | undefined = undefined;
 
+// add test world when we're not connected to the server
+const setupTest = () => {
+    if (renderer) {
+        renderer.dispose();
+    }
+    renderer = new Renderer({
+        command: 'start',
+        map: {
+            width: 10,
+            height: 10,
+            tiles: [
+                ['G', 'G', 'G', 'D', 'D', 'D', 'D', 'G', 'G', 'G'],
+                ['D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'D', 'D'],
+                ['D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'G', 'D'],
+                ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'G', 'D', 'D'],
+                ['D', 'G', 'G', 'D', 'D', 'D', 'D', 'G', 'G', 'G'],
+                ['G', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+                ['D', 'G', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+                ['D', 'D', 'G', 'D', 'D', 'D', 'D', 'G', 'G', 'G'],
+                ['D', 'D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
+                ['G', 'G', 'D', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
+            ],
+            sector_size: 2
+        },
+        teams: [
+            {id: 0, name: 'neutral'},
+            {id: 1, name: 'A'},
+            {id: 2, name: 'B'}
+        ]
+    });
+    renderer.update({
+        command: "next_turn",
+        changed: [
+            { id: 0, type: 'thrower', team: 1, location: {x: 0, y: 0}, hp: 10 },
+            { id: 1, type: 'thrower', team: 2, location: {x: 4, y: 9}, hp: 10 },
+            { id: 2, type: 'hedge', team: 0, location: {x: 4, y: 8}, hp: 10 },
+            { id: 3, type: 'statue', team: 1, location: {x: 5, y: 5}, hp: 10 },
+        ],
+        dead: [],
+        changed_sectors: [],
 
-// create a render and set the size
-const renderer = new WebGLRenderer();
-renderer.setClearColor(0xEEEEEE);
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = PCFSoftShadowMap;
+        successful: [],
+        failed: [],
+        reasons: [],
 
-// create the ground plane
-const planeGeometry = new PlaneGeometry(60, 20, 1, 1);
-const planeMaterial = new MeshLambertMaterial({color: 0xffffff});
-const plane = new Mesh(planeGeometry, planeMaterial);
-plane.receiveShadow = true;
+        next_team: 1
+    });
+    document.body.appendChild(renderer.domElement);
+};
+setupTest();
 
-// rotate and position the plane
-plane.rotation.x = -0.5 * Math.PI;
-plane.position.x = 15;
-plane.position.y = 0;
-plane.position.z = 0;
+let ws = new ReconnectingWebSocket('ws://localhost:6173/', []);
 
-// add the plane to the scene
-scene.add(plane);
+ws.onclose = (event) => {
+    console.log('ws connection closed');
+};
+ws.onopen = (event) => {
+    console.log('connected');
+}
+ws.onerror = (err) => {
+    console.log('ws error: ', err);
+};
+ws.onmessage = (message) => {
+    let command = JSON.parse(message.data);
+    // TODO validate?
+    if (command.command === 'start') {
+        if (renderer) {
+            renderer.dispose();
+        }
 
-// create a cube
-const cubeGeometry = new BoxGeometry(4, 4, 4);
-var textureLoader = new TextureLoader();
-var textureLogo = textureLoader.load(LogoImg);
-var logoMaterial = new SpriteMaterial( {map: textureLogo, color: 0xffffff});
-const cube = new Mesh(cubeGeometry, logoMaterial);
-cube.castShadow = true;
-
-// position the cube
-cube.position.x = -4;
-cube.position.y = 3;
-cube.position.z = 0;
-
-// add the cube to the scene
-scene.add(cube);
-const sphereGeometry = new SphereGeometry(4, 20, 20);
-const sphereMaterial = new MeshLambertMaterial({color: 0x7777ff});
-const sphere = new Mesh(sphereGeometry, sphereMaterial);
-
-// position the sphere
-sphere.position.x = 20;
-sphere.position.y = 0;
-sphere.position.z = 2;
-sphere.castShadow = true;
-
-// add the sphere to the scene
-scene.add(sphere);
-
-// position and point the camera to the center of the scene
-camera.position.x = -25;
-camera.position.y = 30;
-camera.position.z = 25;
-camera.lookAt(new Vector3(10, 0, 0));
-
-// add subtle ambient lighting
-const ambiColor = "#0c0c0c";
-const ambientLight = new AmbientLight(ambiColor);
-scene.add(ambientLight);
-
-// add spotlight for the shadows
-const spotLight = new SpotLight(0xffffff);
-spotLight.position.set(-40, 60, -10);
-spotLight.castShadow = true;
-scene.add(spotLight);
-
-
-// add the output of the renderer to the html element
-document.body.appendChild(renderer.domElement);
-
-// call the render function
-var step = 0;
-const controls = {
-    rotationSpeed : 0.02,
-    bouncingSpeed : 0.03,
-    ambientColor : ambiColor,
-    disableSpotlight : false
+        renderer = new Renderer(command);
+        document.body.appendChild(renderer.domElement);
+    } else if (command.command === 'next_turn') {
+        if (renderer) {
+            renderer.update(command);
+        } else {
+            console.log("no renderer, skipping turn");
+        }
+    }
 };
 
-function render() {
-    // rotate the cube around its axes
-    cube.rotation.x += controls.rotationSpeed;
-    cube.rotation.y += controls.rotationSpeed;
-    cube.rotation.z += controls.rotationSpeed;
-    // bounce the sphere up and down
-    step += controls.bouncingSpeed;
-    sphere.position.x = 20 + ( 10 * (Math.cos(step)));
-    sphere.position.y = 2 + ( 10 * Math.abs(Math.sin(step)));
-    // render using requestAnimationFrame
-    //requestAnimationFrame(render);
-    renderer.render(scene, camera);
-}
+document.onmousemove = (e) => {
+    if (renderer) {
+        renderer.setMouse(e.pageX, e.pageY);
+    }
+};
 
+// 0: fps, 1: ms, 2: mb, 3+: custom
+// note: stats library has no types, double check your
+// method calls
+var stats = new Stats();
+stats.showPanel(0);
+document.body.appendChild(stats.dom);
+
+// rendering loop
+const render = () => {
+    stats.begin();
+    if (renderer) {
+        renderer.render();
+    }
+    stats.end();
+    requestAnimationFrame(render);
+}
 render();

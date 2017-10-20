@@ -11,10 +11,9 @@
       "sourceMap": true,
       "types": [],
       "strictNullChecks": true,
-      "noImplicitAny": true
+      "noImplicitAny": true,
+      "allowJs": true
     },
-    "files": [
-    ],
     "exclude": [
       "node_modules",
       "dist"

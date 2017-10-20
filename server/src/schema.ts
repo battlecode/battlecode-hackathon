@@ -1,5 +1,9 @@
-
 export type EntityID = number;
+
+/**
+ * The ID of a team.
+ * TeamID 0 is always the ID of the non-player team (i.e. the team of hedges).
+ */
 export type TeamID = number;
 
 export interface Location {
@@ -18,8 +22,8 @@ export interface EntityData {
     id: EntityID;
     type: EntityType;
     location: Location;
-    team: TeamID;
     hp: number;
+    team: TeamID;
     cooldown_end?: number;
     held_by?: boolean;
     holding?: EntityID;
@@ -36,26 +40,41 @@ export interface SectorData {
 
 /**
  * The data for the map.
+ * 
+ * Coordinate system: 
  */
 export interface MapData {
     height: number;
     width: number;
     /**
-     * Map is partitioned into n by n square Sectors
+     * Map is partitioned into square Sectors
      * Each Sector stores Location of its top left corner and covers sector_size * sector_size area 
      */
     sector_size: number;
     /**
-     * Indexed as [y][x];
+     * Slightly wacky indexing:
+     * Indexed as [height - (y + 1)][x];
+     * This allows a list of tiles to be written out in a text file
+     * such that their lower left corner will be placed at (0,0),
+     * up is y, and right is x.
      */
     tiles: MapTile[][];
 }
+
 /**
  * Team data.
  */
 export interface TeamData {
     id: TeamID;
     name: string;
+}
+
+/**
+ * The neutral team.
+ */
+export const NEUTRAL_TEAM: TeamData = {
+    id: 0,
+    name: 'neutral'
 }
 
 /**
@@ -91,11 +110,11 @@ export interface NextTurn {
     command: "next_turn";
     changed: EntityData[];
     dead: EntityID[];
-    changedSectors: SectorData[];
+    changed_sectors: SectorData[];
 
-    successful?: Action[];
-    failed?: Action[];
-    reasons?: string[];
+    successful: Action[];
+    failed: Action[];
+    reasons: string[];
 
     next_team: TeamID;
     winner?: TeamID;

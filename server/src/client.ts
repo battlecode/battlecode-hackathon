@@ -50,45 +50,36 @@ export class Client {
         return new Client({
             type: 'web',
             web: socket
-        })
+        });
     }
-
-    /**
-     * Reduce validation overhead.
-     * This way, the socket only has to marshal from JSON once.
-     */
-    private commandCallbacks: Array<(command: IncomingCommand, client: Client) => void>;
 
     private constructor(socket: SocketEnum) {
         this.id = uuid();
-        this.commandCallbacks = [];
         this.socket = socket;
-
-        if (this.socket.type === 'web') {
-            this.socket.web.on('message', (data) => {
-                const command = validateIncoming(data as (string | Buffer));
-
-                for (const callback of this.commandCallbacks) {
-                    // note: arrow functions preserve 'this'
-                    callback(command, this);
-                }
-            });
-        } else {
-            this.socket.byline.on('data', (data) => {
-                const command = validateIncoming(data);
-
-                for (const callback of this.commandCallbacks) {
-                    callback(command, this);
-                }
-            });
-        }
     }
 
     /**
      * @param callback called when command received
      */
-    onCommand(callback: (command: IncomingCommand) => void) {
-        this.commandCallbacks.push(callback);
+    onCommand(callback: (command: IncomingCommand, client: Client) => void) {
+        if (this.socket.type === 'tcp') {
+            this.socket.byline.on('data', (data) => {
+                const command = validateIncoming(data);
+
+                //console.log(this.id + ' > ' + JSON.stringify(command));
+
+                // note: arrow functions preserve 'this'
+                callback(command, this);
+            });
+        } else {
+            this.socket.web.on('message', (data) => {
+                const command = validateIncoming(data as (string | Buffer));
+
+                //console.log(this.id + ' > ' + JSON.stringify(command));
+
+                callback(command, this);
+            });
+        }
     }
 
     onClose(callback: (client: Client) => void) {
@@ -100,10 +91,12 @@ export class Client {
     }
 
     send(command: OutgoingCommand) {
+        //console.log(this.id + " < " + JSON.stringify(command));
         if (this.socket.type === 'tcp') {
             this.socket.tcp.write(JSON.stringify(command));
             this.socket.tcp.write('\n');
         } else {
+            // no need to split commands manually with websockets
             this.socket.web.send(JSON.stringify(command));
         }
     }
@@ -126,4 +119,3 @@ const validateIncoming = (command: string | Buffer) => {
 
     return JSON.parse(commandS) as IncomingCommand;
 };
-

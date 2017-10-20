@@ -9,7 +9,7 @@ const dev = require('./webpack.config');
 // overrides
 
 // minify output using babel
-dev.plugins = [
+dev.plugins = dev.plugins.concat([
   new webpack.optimize.OccurrenceOrderPlugin(),
   new webpack.DefinePlugin({
     'process.env': {
@@ -26,7 +26,7 @@ dev.plugins = [
     analyzerMode: 'static',
     openAnalyzer: false
   })
-];
+]);
 // no source maps
 dev.devtool = false;
 

@@ -1,6 +1,7 @@
 import { Action, EntityData, SectorData, EntityID, NextTurn,
     Location, MapTile, TeamData, TeamID, MapData, NEUTRAL_TEAM } from './schema';
 import { Sector } from './zone';
+import LocationMap from './locationmap';
 
 function distance(a: Location, b: Location): number {
     var dx = a.x - b.x;
@@ -21,68 +22,6 @@ const DELAYS = {
     throw: 10,
     build: 10
 };
-
-// a map from locations to entities
-// (Map<Location, T> works by identity which is wrong)
-export class LocationMap<T> {
-    // a sparse array
-    // don't worry, the JS engine can handle it :)
-    // non-set items will be undefined
-    items: T[];
-
-    width: number;
-    height: number;
-
-    constructor(width: number, height: number) {
-        this.items = Array(width * height);
-        this.width = width;
-        this.height = height;
-    }
-
-    set(x: number, y: number, v: T) {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        this.items[i] = v;
-    }
-
-    delete(x: number, y: number) {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        delete this.items[i];
-    }
-
-    has(x: number, y: number): boolean {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        return this.items[i] !== undefined;
-    }
-
-    get(x: number, y: number): T | undefined {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        return this.items[i];
-    }
-
-    *values(): IterableIterator<T> {
-        for (let i = 0; i < this.width; i++) {
-            for (let j = 0; j < this.height; j++) {
-                let v = this.get(i,j);
-                if (v) {
-                    yield v;
-                }
-            }
-        }
-    }
-}
-
 
 export class Game {
     world: MapData;
@@ -301,6 +240,12 @@ export class Game {
                 return;
             }
 
+            if (isOutOfBound(action.loc, this.world)) {
+                diff.failed.push(action);
+                diff.reasons.push("Location out of bounds of world: " + JSON.stringify(action.loc));
+                return;
+            }
+
             if (this.occupied.has(action.loc.x, action.loc.y)) {
                 diff.failed.push(action);
                 diff.reasons.push("Location already occupied: " + JSON.stringify(action.loc));
@@ -312,12 +257,6 @@ export class Game {
                 diff.reasons.push("Statues can't move or build. (They build automatically.)");
                 return;
 
-            }
-
-            if (isOutOfBound(action.loc, this.world)) {
-                diff.failed.push(action);
-                diff.reasons.push("Location out of bounds of world: " + JSON.stringify(action.loc));
-                return;
             }
 
             var newEntity: EntityData;

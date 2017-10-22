@@ -5,27 +5,27 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "webpack-dev-server --config webpack.config.js",
+    "start": "webpack-dev-server --config webpack.config.js --open",
     "build": "webpack --config webpack.prod.config.js"
   },
   "author": "Battlecode Devs",
   "license": "MIT",
   "devDependencies": {
-    "@types/lodash-es": "^4.14.7",
-    "@types/three": "^0.84.27",
     "babel-loader": "^7.1.2",
     "file-loader": "^1.1.5",
     "ts-loader": "^2.3.7",
     "typescript": "^2.5.3",
     "webpack": "^3.7.1",
     "webpack-bundle-analyzer": "^2.9.0",
-    "webpack-dev-server": "^2.9.1"
-  },
-  "dependencies": {
-    "@types/reconnectingwebsocket": "^1.0.1",
+    "webpack-dev-server": "^2.9.1",
     "babel-core": "^6.26.0",
     "babel-minify-webpack-plugin": "^0.2.0",
-    "babel-preset-env": "^1.6.0",
+    "babel-preset-env": "^1.6.0"
+  },
+  "dependencies": {
+    "@types/lodash-es": "^4.14.7",
+    "@types/three": "^0.84.27",
+    "@types/reconnectingwebsocket": "^1.0.1",
     "lodash-es": "^4.17.4",
     "reconnectingwebsocket": "^1.0.0",
     "stats.js": "^0.17.0",

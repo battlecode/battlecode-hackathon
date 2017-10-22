@@ -1,4 +1,4 @@
-import { Action, EntityData, SectorData, EntityID, NextTurn,
+import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
     Location, MapTile, TeamData, TeamID, MapData, NEUTRAL_TEAM } from './schema';
 import { Sector } from './zone';
 import LocationMap from './locationmap';
@@ -29,14 +29,14 @@ export class Game {
     entities: Map<EntityID, EntityData>;
     occupied: LocationMap<EntityID>;
     sectors: LocationMap<Sector>;
-    turn: number;
     highestId: number;
     // ids must be consecutive
     nextTeam: TeamID;
+    nextTurn: number;
 
     constructor(world: MapData, teams: TeamData[]) {
         validateTeams(teams);
-        this.turn = 0;
+        this.nextTurn = 0;
         this.highestId = 0;
         this.world = world;
         this.teams = teams;
@@ -53,8 +53,11 @@ export class Game {
     }
 
     private makeNextTurn(): NextTurn {
+        let turn = this.nextTurn;
+        this.nextTurn++;
         return {
             command: "next_turn",
+            turn: turn,
             changed: [],
             dead: [],
             changed_sectors: [],
@@ -66,7 +69,7 @@ export class Game {
     }
 
     addInitialEntitiesAndSectors(entities: EntityData[]): NextTurn {
-        if (this.turn !== 0) {
+        if (this.nextTurn !== 0) {
             throw new Error("Can't add entities except on turn 0");
         }
 
@@ -138,7 +141,12 @@ export class Game {
         this.occupied.delete(entity.location.x, entity.location.y);
     }
 
-    makeTurn(team: TeamID, actions: Action[]): NextTurn {
+    makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
+        // player will send the last turn id they received
+        const correctTurn = this.nextTurn - 1;
+        if (turn !== correctTurn) {
+            throw new Error("wrong turn: given: "+turn+", should be: "+correctTurn);
+        }
         if (team !== this.nextTeam) {
             throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
@@ -148,7 +156,6 @@ export class Game {
         } else {
             this.nextTeam++;
         }
-        this.turn++;
 
         var diff = this.makeNextTurn();
         for (var i = 0; i < actions.length; i++) {
@@ -156,7 +163,7 @@ export class Game {
         }
 
         // spawn throwers from controlled sectors every 10 turns
-        if (this.turn % 10 == 0) {
+        if (this.nextTurn % 10 == 0) {
             for (var thrower of this.getNewThrowers()) {
                 this.addOrUpdateEntity(thrower);
                 diff.changed.push(thrower);
@@ -226,7 +233,7 @@ export class Game {
             return;
         }
 
-        if (entity.cooldown_end !== undefined && entity.cooldown_end > this.turn) {
+        if (entity.cooldown_end !== undefined && entity.cooldown_end > this.nextTurn) {
             diff.failed.push(action);
             diff.reasons.push("Entity still on cool down: " + entity.id);
             return;

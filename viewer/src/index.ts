@@ -44,6 +44,7 @@ const setupTest = () => {
     });
     renderer.update({
         command: "next_turn",
+        turn: 0,
         changed: [
             { id: 0, type: 'thrower', team: 1, location: {x: 0, y: 0}, hp: 10 },
             { id: 1, type: 'thrower', team: 2, location: {x: 4, y: 9}, hp: 10 },
@@ -63,7 +64,9 @@ const setupTest = () => {
 };
 setupTest();
 
-let ws = new ReconnectingWebSocket('ws://localhost:6173/', []);
+let ws = new ReconnectingWebSocket('ws://localhost:6173/', [], {
+    maxReconnectInterval: 5000
+});
 
 ws.onclose = (event) => {
     console.log('ws connection closed');

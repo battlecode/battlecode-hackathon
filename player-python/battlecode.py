@@ -243,6 +243,7 @@ class Game(object):
         while True:
             turn = self._recv()
             assert turn['command'] == 'next_turn'
+            self.turn = turn['turn']
             if 'winner' in turn:
                 # TODO
                 raise Exception('Game finished')
@@ -259,9 +260,12 @@ class Game(object):
             if turn['next_team'] == self.team.id:
                 return
 
+
+
     def _submit_turn(self):
         self._send({
             'command': 'make_turn',
+            'turn': self.turn,
             'actions': self._action_queue
         })
         del self._action_queue[:]

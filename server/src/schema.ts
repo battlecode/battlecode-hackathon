@@ -6,6 +6,12 @@ export type EntityID = number;
  */
 export type TeamID = number;
 
+/**
+ * A turn id.
+ * The first turn is turn 0, when entities and sectors are initially spawned.
+ */
+export type Turn = number;
+
 export interface Location {
     x: number;
     y: number;
@@ -108,6 +114,10 @@ export interface GameStart {
  */
 export interface NextTurn {
     command: "next_turn";
+    /**
+     * The first turn sent will be 0, and contain all entity data for the map.
+     */
+    turn: number;
     changed: EntityData[];
     dead: EntityID[];
     changed_sectors: SectorData[];
@@ -124,6 +134,10 @@ export interface NextTurn {
  */
 export interface MakeTurn {
     command: "make_turn";
+    /**
+     * Send the turn from the previous NextTurn received.
+     */
+    turn: number;
     actions: Action[];
 }
 export interface MoveAction {

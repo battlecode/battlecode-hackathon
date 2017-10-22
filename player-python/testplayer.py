@@ -9,7 +9,6 @@ rounds = 0
 start = time.clock()
 
 while True:
-    time.sleep(.1)
     game.next_turn()
 
     rounds += 1
@@ -20,6 +19,8 @@ while True:
                 entity.location.x + random.randint(-1,2),
                 entity.location.y + random.randint(-1,2)
             ))
+    if rounds > 10000:
+        break
 
 end = time.clock()
 print('clock time: '+str(end - start))

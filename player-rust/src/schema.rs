@@ -60,6 +60,7 @@ pub enum CommandToServer {
         name: String,
     },
     MakeTurn {
+        turn: u32,
         actions: Vec<Action>,
     }
 }
@@ -77,6 +78,7 @@ pub enum CommandToClient {
         teams: Vec<Team>,
     },
     NextTurn {
+        turn: u32,
         changed: Vec<Entity>,
         dead: Vec<EntityID>,
 
@@ -133,6 +135,7 @@ mod tests {
         let make_turn: CommandToServer = serde_json::from_str(r#"
         {
             "command": "make_turn",
+            "turn": 0,
             "actions": [
                 {
                     "action": "move",
@@ -163,6 +166,7 @@ mod tests {
         "#).unwrap();
 
         assert_eq!(make_turn, CommandToServer::MakeTurn {
+            turn: 0,
             actions: vec![
                 Action::Move {
                     id: 57,
@@ -232,6 +236,7 @@ mod tests {
         let next_turn: CommandToClient = serde_json::from_str(r#"
         {
             "command": "next_turn",
+            "turn": 0,
             "changed": [{
                  "id": 0,
                  "type": "thrower",
@@ -254,6 +259,7 @@ mod tests {
         "#).unwrap();
 
         assert_eq!(next_turn, CommandToClient::NextTurn {
+            turn: 0,
             changed: vec![Entity {
                  id: 0,
                  entity_type: EntityType::Thrower,
@@ -273,6 +279,5 @@ mod tests {
             next_team: 3,
             winner: Some(7)
         });
-
     }
 }

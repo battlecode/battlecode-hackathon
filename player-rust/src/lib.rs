@@ -53,6 +53,7 @@ type Incoming = StreamDeserializer<'static, IoRead<BufReader<TcpStream>>, Comman
 type Outgoing = BufWriter<TcpStream>;
 
 pub struct Game {
+    pub turn: u32,
     pub map: Map,
     pub entities: FastHashMap<EntityID, Entity>,
     pub team_id: TeamID,
@@ -92,6 +93,7 @@ impl Game {
 
         if let CommandToClient::Start { map, teams } = start {
             let mut game = Game {
+                turn: 0,
                 team_id: team_id,
                 teams: teams,
                 entities: FastHashMap::default(),
@@ -120,6 +122,7 @@ impl Game {
 
     fn submit_turn(&mut self) -> Result<()> {
         let command = CommandToServer::MakeTurn {
+            turn: self.turn,
             actions: self.queued_actions.drain(..).collect()
         };
         write_command(command, &mut self.outgoing)
@@ -131,6 +134,7 @@ impl Game {
 
             // TODO use all fields
             if let CommandToClient::NextTurn {
+                turn,
                 changed,
                 dead,
                 successful: _successful,
@@ -139,6 +143,7 @@ impl Game {
                 next_team,
                 winner: _winner
             } = turn {
+                self.turn = turn;
                 for id in dead {
                     self.entities.remove(&id);
                 }

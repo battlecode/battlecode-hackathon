@@ -74,6 +74,21 @@ const DEFAULT_ENTITIES: EntityData[] = [
     {id: 8, type: "thrower", location: {x:3,y:3}, team: 1, hp: 10},
     {id: 9, type: "thrower", location: {x:8,y:8}, team: 2, hp: 10},
 ];
+
+let lastUpdate = Date.now();
+let runningUpdate = 0;
+let updateI = 0;
+const newUpdate = () => {
+    updateI++
+    let now = Date.now();
+    let delta = now - lastUpdate;
+    runningUpdate = runningUpdate * .5 + delta * .5;
+    lastUpdate = now;
+    if (updateI % 100 == 0) {
+        console.log(runningUpdate);
+    }
+}
+
 class GameRunner {
     listeners: Map<ClientID, Client>;
     players: Map<ClientID, TeamID>;
@@ -126,7 +141,7 @@ class GameRunner {
             //    this.startGame();
             //}
 
-            if (this.players.size == 2 && this.listeners.size == 3) {
+            if (this.players.size == 2 && this.listeners.size == 2) {
                 this.startGame();
             }
         } else if (command.command === 'make_turn' && this.state.state === 'play') {
@@ -136,6 +151,7 @@ class GameRunner {
             }
             const diff = this.state.game.makeTurn(teamID, command.actions);
             this.handleDiff(diff);
+            newUpdate();
         } else {
             throw new Error("Invalid command!");
         }

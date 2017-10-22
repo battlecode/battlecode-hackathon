@@ -76,6 +76,7 @@ ws.onerror = (err) => {
 };
 ws.onmessage = (message) => {
     let command = JSON.parse(message.data);
+    newUpdate();
     // TODO validate?
     if (command.command === 'start') {
         if (renderer) {
@@ -105,6 +106,19 @@ document.onmousemove = (e) => {
 var stats = new Stats();
 stats.showPanel(0);
 document.body.appendChild(stats.dom);
+
+const updateTimePanel = new Stats.Panel("UPDT MS", "#d6d8ff", "#424ef4");
+updateTimePanel.update(0, 100);
+stats.addPanel(updateTimePanel);
+let lastUpdate = Date.now();
+let runningUpdate = 0;
+const newUpdate = () => {
+    let now = Date.now();
+    let delta = now - lastUpdate;
+    runningUpdate = runningUpdate * .5 + delta * .5;
+    updateTimePanel.update(runningUpdate, 100);
+    lastUpdate = now;
+}
 
 // rendering loop
 const render = () => {

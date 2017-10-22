@@ -44,6 +44,7 @@ const setupTest = () => {
     });
     renderer.update({
         command: "next_turn",
+        turn: 0,
         changed: [
             { id: 0, type: 'thrower', team: 1, location: {x: 0, y: 0}, hp: 10 },
             { id: 1, type: 'thrower', team: 2, location: {x: 4, y: 9}, hp: 10 },
@@ -63,7 +64,9 @@ const setupTest = () => {
 };
 setupTest();
 
-let ws = new ReconnectingWebSocket('ws://localhost:6173/', []);
+let ws = new ReconnectingWebSocket('ws://localhost:6173/', [], {
+    maxReconnectInterval: 5000
+});
 
 ws.onclose = (event) => {
     console.log('ws connection closed');
@@ -76,6 +79,7 @@ ws.onerror = (err) => {
 };
 ws.onmessage = (message) => {
     let command = JSON.parse(message.data);
+    newUpdate();
     // TODO validate?
     if (command.command === 'start') {
         if (renderer) {
@@ -105,6 +109,19 @@ document.onmousemove = (e) => {
 var stats = new Stats();
 stats.showPanel(0);
 document.body.appendChild(stats.dom);
+
+const updateTimePanel = new Stats.Panel("UPDT MS", "#d6d8ff", "#424ef4");
+updateTimePanel.update(0, 100);
+stats.addPanel(updateTimePanel);
+let lastUpdate = Date.now();
+let runningUpdate = 0;
+const newUpdate = () => {
+    let now = Date.now();
+    let delta = now - lastUpdate;
+    runningUpdate = runningUpdate * .5 + delta * .5;
+    updateTimePanel.update(runningUpdate, 100);
+    lastUpdate = now;
+}
 
 // rendering loop
 const render = () => {

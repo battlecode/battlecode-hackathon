@@ -1,6 +1,7 @@
-import { Action, EntityData, SectorData, EntityID, NextTurn,
+import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
     Location, MapTile, TeamData, TeamID, MapData, NEUTRAL_TEAM } from './schema';
 import { Sector } from './zone';
+import LocationMap from './locationmap';
 
 function distance(a: Location, b: Location): number {
     var dx = a.x - b.x;
@@ -22,82 +23,20 @@ const DELAYS = {
     build: 10
 };
 
-// a map from locations to entities
-// (Map<Location, T> works by identity which is wrong)
-export class LocationMap<T> {
-    // a sparse array
-    // don't worry, the JS engine can handle it :)
-    // non-set items will be undefined
-    items: T[];
-
-    width: number;
-    height: number;
-
-    constructor(width: number, height: number) {
-        this.items = Array(width * height);
-        this.width = width;
-        this.height = height;
-    }
-
-    set(x: number, y: number, v: T) {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        this.items[i] = v;
-    }
-
-    delete(x: number, y: number) {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        delete this.items[i];
-    }
-
-    has(x: number, y: number): boolean {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        return this.items[i] !== undefined;
-    }
-
-    get(x: number, y: number): T | undefined {
-        if (x > this.width || y > this.height) {
-            throw new Error("out of bounds: "+x+","+y+" ["+this.width+","+this.height+"]");
-        }
-        const i = y * this.width + x;
-        return this.items[i];
-    }
-
-    *values(): IterableIterator<T> {
-        for (let i = 0; i < this.width; i++) {
-            for (let j = 0; j < this.height; j++) {
-                let v = this.get(i,j);
-                if (v) {
-                    yield v;
-                }
-            }
-        }
-    }
-}
-
-
 export class Game {
     world: MapData;
     teams: TeamData[];
     entities: Map<EntityID, EntityData>;
     occupied: LocationMap<EntityID>;
     sectors: LocationMap<Sector>;
-    turn: number;
     highestId: number;
     // ids must be consecutive
     nextTeam: TeamID;
+    nextTurn: number;
 
     constructor(world: MapData, teams: TeamData[]) {
         validateTeams(teams);
-        this.turn = 0;
+        this.nextTurn = 0;
         this.highestId = 0;
         this.world = world;
         this.teams = teams;
@@ -114,8 +53,11 @@ export class Game {
     }
 
     private makeNextTurn(): NextTurn {
+        let turn = this.nextTurn;
+        this.nextTurn++;
         return {
             command: "next_turn",
+            turn: turn,
             changed: [],
             dead: [],
             changed_sectors: [],
@@ -127,7 +69,7 @@ export class Game {
     }
 
     addInitialEntitiesAndSectors(entities: EntityData[]): NextTurn {
-        if (this.turn !== 0) {
+        if (this.nextTurn !== 0) {
             throw new Error("Can't add entities except on turn 0");
         }
 
@@ -199,7 +141,12 @@ export class Game {
         this.occupied.delete(entity.location.x, entity.location.y);
     }
 
-    makeTurn(team: TeamID, actions: Action[]): NextTurn {
+    makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
+        // player will send the last turn id they received
+        const correctTurn = this.nextTurn - 1;
+        if (turn !== correctTurn) {
+            throw new Error("wrong turn: given: "+turn+", should be: "+correctTurn);
+        }
         if (team !== this.nextTeam) {
             throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
@@ -209,7 +156,6 @@ export class Game {
         } else {
             this.nextTeam++;
         }
-        this.turn++;
 
         var diff = this.makeNextTurn();
         for (var i = 0; i < actions.length; i++) {
@@ -217,7 +163,7 @@ export class Game {
         }
 
         // spawn throwers from controlled sectors every 10 turns
-        if (this.turn % 10 == 0) {
+        if (this.nextTurn % 10 == 0) {
             for (var thrower of this.getNewThrowers()) {
                 this.addOrUpdateEntity(thrower);
                 diff.changed.push(thrower);
@@ -287,7 +233,7 @@ export class Game {
             return;
         }
 
-        if (entity.cooldown_end !== undefined && entity.cooldown_end > this.turn) {
+        if (entity.cooldown_end !== undefined && entity.cooldown_end > this.nextTurn) {
             diff.failed.push(action);
             diff.reasons.push("Entity still on cool down: " + entity.id);
             return;
@@ -298,6 +244,12 @@ export class Game {
                 diff.failed.push(action);
                 diff.reasons.push("Distance too far: old: " + JSON.stringify(entity.location)
                      + " new: " + action.loc);
+                return;
+            }
+
+            if (isOutOfBound(action.loc, this.world)) {
+                diff.failed.push(action);
+                diff.reasons.push("Location out of bounds of world: " + JSON.stringify(action.loc));
                 return;
             }
 
@@ -312,12 +264,6 @@ export class Game {
                 diff.reasons.push("Statues can't move or build. (They build automatically.)");
                 return;
 
-            }
-
-            if (isOutOfBound(action.loc, this.world)) {
-                diff.failed.push(action);
-                diff.reasons.push("Location out of bounds of world: " + JSON.stringify(action.loc));
-                return;
             }
 
             var newEntity: EntityData;

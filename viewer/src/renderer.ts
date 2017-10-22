@@ -51,7 +51,7 @@ export default class Renderer {
         this.renderer.shadowMap.type = THREE.BasicShadowMap;
         // makes picture cleaner but more expensive on retina
         // TODO: conditionally enable? fancy mode?
-        // this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
 
         // add the tiles to the world
         const tiles = makeTiles(start.map);
@@ -88,7 +88,7 @@ export default class Renderer {
         this.perspective.position.z = 2;
         this.perspective.lookAt(new Vector3(start.map.width / 2, start.map.height / 2, 0));
 
-        this.isometric = new THREE.OrthographicCamera(- mapD * aspect, mapD * aspect, mapD, - mapD, -10, 1000);
+        this.isometric = new THREE.OrthographicCamera(- mapD * aspect, mapD * aspect, mapD, - mapD, -200, 200);
 
         this.setMouse(0,0);
     }

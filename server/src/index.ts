@@ -16,40 +16,55 @@ import * as net from 'net';
 import * as http from 'http';
 import * as ws from 'ws';
 
+//const DEFAULT_MAP: MapData = {
+//    height: 12,
+//    width: 12,
+//    tiles: [
+//        ['D','D','D','G','D','D','D','D','D','D','G','D'],
+//        ['D','D','D','G','D','D','D','D','D','D','G','D'],
+//        ['D','D','G','D','D','D','D','D','D','D','G','D'],
+//        ['G','G','D','D','D','D','D','D','D','D','G','D'],
+//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
+//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
+//        ['D','D','D','D','D','G','G','D','D','D','D','D'],
+//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
+//        ['D','G','D','D','D','D','D','D','D','D','G','G'],
+//        ['D','G','D','D','D','D','D','D','D','G','D','D'],
+//        ['D','G','D','D','D','D','D','D','G','D','D','D'],
+//        ['D','G','D','D','D','D','D','D','G','D','D','D'],
+//    ],
+//    sector_size: 10,
+//};
+//const DEFAULT_ENTITIES: EntityData[] = [
+//    {id: 0, type: "statue", location: {x:1,y:0}, team: 1, hp: 10},
+//    {id: 1, type: "statue", location: {x:10,y:11}, team: 2, hp: 10},
+//    {id: 2, type: "hedge", location: {x:1,y:2}, team: 0, hp: 100},
+//    {id: 3, type: "hedge", location: {x:2,y:2}, team: 0, hp: 100},
+//    {id: 4, type: "hedge", location: {x:3,y:2}, team: 0, hp: 100},
+//    {id: 5, type: "hedge", location: {x:10,y:9}, team: 0, hp: 100},
+//    {id: 6, type: "hedge", location: {x:9,y:9}, team: 0, hp: 100},
+//    {id: 7, type: "hedge", location: {x:8,y:9}, team: 0, hp: 100},
+//    {id: 8, type: "thrower", location: {x:3,y:3}, team: 1, hp: 10},
+//    {id: 9, type: "thrower", location: {x:8,y:8}, team: 2, hp: 10},
+//];
+
 const DEFAULT_MAP: MapData = {
-    height: 12,
-    width: 12,
-    tiles: [
-        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-        ['D','D','G','D','D','D','D','D','D','D','G','D'],
-        ['G','G','D','D','D','D','D','D','D','D','G','D'],
-        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-        ['D','D','D','D','D','G','G','D','D','D','D','D'],
-        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-        ['D','G','D','D','D','D','D','D','D','D','G','G'],
-        ['D','G','D','D','D','D','D','D','D','G','D','D'],
-        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-    ],
-    sector_size: 10,
+    height: 100,
+    width: 100,
+    tiles: Array(100).fill(Array(100).fill('D')),
+    sector_size: 10
 };
-for (let i = 0; i < 10; i++) {
-    DEFAULT_MAP.tiles[i][i] = 'D';
+const DEFAULT_ENTITIES: EntityData[] = [];
+let id = 0;
+for (let x = 0; x < 10; x++) {
+    for (let y = 0; y < 10; y++) {
+        DEFAULT_ENTITIES.push(
+            {id: id, type: "statue", location: {x:x*10,y:y*10}, team: 1 + (id % 2), hp: 1},
+        );
+        id++;
+    }
 }
-const DEFAULT_ENTITIES: EntityData[] = [
-    {id: 0, type: "statue", location: {x:1,y:0}, team: 1, hp: 10},
-    {id: 1, type: "statue", location: {x:10,y:11}, team: 2, hp: 10},
-    {id: 2, type: "hedge", location: {x:1,y:2}, team: 0, hp: 100},
-    {id: 3, type: "hedge", location: {x:2,y:2}, team: 0, hp: 100},
-    {id: 4, type: "hedge", location: {x:3,y:2}, team: 0, hp: 100},
-    {id: 5, type: "hedge", location: {x:10,y:9}, team: 0, hp: 100},
-    {id: 6, type: "hedge", location: {x:9,y:9}, team: 0, hp: 100},
-    {id: 7, type: "hedge", location: {x:8,y:9}, team: 0, hp: 100},
-    {id: 8, type: "thrower", location: {x:3,y:3}, team: 1, hp: 10},
-    {id: 9, type: "thrower", location: {x:8,y:8}, team: 2, hp: 10},
-];
+
 class GameRunner {
     listeners: Map<ClientID, Client>;
     players: Map<ClientID, TeamID>;
@@ -98,10 +113,6 @@ class GameRunner {
             };
             client.send(confirmation);
 
-            //if (this.players.size >= 2) {
-            //    this.startGame();
-            //}
-
             if (this.players.size == 2 && this.listeners.size == 3) {
                 this.startGame();
             }
@@ -110,7 +121,7 @@ class GameRunner {
             if (teamID === undefined) {
                 throw new Error("non-player client can't make turn: "+client.id);
             }
-            const diff = this.state.game.makeTurn(teamID, command.actions);
+            const diff = this.state.game.makeTurn(teamID, command.turn, command.actions);
             this.handleDiff(diff);
         } else {
             throw new Error("Invalid command!");

@@ -1,3 +1,4 @@
+import { Packet } from '_debugger';
 import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, MapData } from './schema';
 
 import * as net from 'net';
@@ -53,32 +54,52 @@ export class Client {
         });
     }
 
+    /**
+     * Efficiently send a command to a list of clients.
+     */
+    static sendToAll(command: OutgoingCommand, clients: Client[]) {
+        const serialized = JSON.stringify(command);
+        for (let client of clients) {
+            client.sendString(serialized);
+        }
+    }
+
     private constructor(socket: SocketEnum) {
         this.id = uuid();
         this.socket = socket;
+
+        let errorCb = (err: Error) => {
+            console.log("error with client "+this.id);
+            if (err) {
+                console.log(err.message);
+                console.log(err.stack);
+            } else {
+                console.log("???")
+            }
+        }
     }
 
     /**
      * @param callback called when command received
      */
     onCommand(callback: (command: IncomingCommand, client: Client) => void) {
+        let cb = (data: string | Buffer) => {
+            let command;
+            try {
+                command = validateIncoming(data);
+            } catch (e) {
+                this.send({
+                    command: "error",
+                    reason: "failed to parse command: "+data
+                });
+                return;
+            }
+            callback(command, this);
+        };
         if (this.socket.type === 'tcp') {
-            this.socket.byline.on('data', (data) => {
-                const command = validateIncoming(data);
-
-                //console.log(this.id + ' > ' + JSON.stringify(command));
-
-                // note: arrow functions preserve 'this'
-                callback(command, this);
-            });
+            this.socket.byline.on('data', cb);
         } else {
-            this.socket.web.on('message', (data) => {
-                const command = validateIncoming(data as (string | Buffer));
-
-                //console.log(this.id + ' > ' + JSON.stringify(command));
-
-                callback(command, this);
-            });
+            this.socket.web.on('message', cb);
         }
     }
 
@@ -92,12 +113,16 @@ export class Client {
 
     send(command: OutgoingCommand) {
         //console.log(this.id + " < " + JSON.stringify(command));
+        this.sendString(JSON.stringify(command));
+    }
+
+    private sendString(command: string) {
         if (this.socket.type === 'tcp') {
-            this.socket.tcp.write(JSON.stringify(command));
+            this.socket.tcp.write(command);
             this.socket.tcp.write('\n');
         } else {
             // no need to split commands manually with websockets
-            this.socket.web.send(JSON.stringify(command));
+            this.socket.web.send(command);
         }
     }
 

@@ -1,197 +1,442 @@
+import { GameStart } from '../../viewer/src/schema';
 import {
+    CreateGame,
     EntityData,
+    GameID,
+    GameReplay,
     IncomingCommand,
+    Login,
     LoginConfirm,
+    MakeTurn,
     MapData,
     MapTile,
-    NextTurn,
+    MatchData,
     NEUTRAL_TEAM,
+    NextTurn,
     OutgoingCommand,
+    PlayerKey,
     TeamData,
+    SpectateAll,
     TeamID,
 } from './schema';
+import ClientError from './error';
 import { Game } from './game';
 import { Client, ClientID } from './client';
 import * as net from 'net';
 import * as http from 'http';
 import * as ws from 'ws';
+import * as zlib from 'zlib';
+import { promisify } from 'util';
+import * as uuid from 'uuid/v4';
 
-//const DEFAULT_MAP: MapData = {
-//    height: 12,
-//    width: 12,
-//    tiles: [
-//        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-//        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-//        ['D','D','G','D','D','D','D','D','D','D','G','D'],
-//        ['G','G','D','D','D','D','D','D','D','D','G','D'],
-//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-//        ['D','D','D','D','D','G','G','D','D','D','D','D'],
-//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-//        ['D','G','D','D','D','D','D','D','D','D','G','G'],
-//        ['D','G','D','D','D','D','D','D','D','G','D','D'],
-//        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-//        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-//    ],
-//    sector_size: 10,
-//};
-//const DEFAULT_ENTITIES: EntityData[] = [
-//    {id: 0, type: "statue", location: {x:1,y:0}, team: 1, hp: 10},
-//    {id: 1, type: "statue", location: {x:10,y:11}, team: 2, hp: 10},
-//    {id: 2, type: "hedge", location: {x:1,y:2}, team: 0, hp: 100},
-//    {id: 3, type: "hedge", location: {x:2,y:2}, team: 0, hp: 100},
-//    {id: 4, type: "hedge", location: {x:3,y:2}, team: 0, hp: 100},
-//    {id: 5, type: "hedge", location: {x:10,y:9}, team: 0, hp: 100},
-//    {id: 6, type: "hedge", location: {x:9,y:9}, team: 0, hp: 100},
-//    {id: 7, type: "hedge", location: {x:8,y:9}, team: 0, hp: 100},
-//    {id: 8, type: "thrower", location: {x:3,y:3}, team: 1, hp: 10},
-//    {id: 9, type: "thrower", location: {x:8,y:8}, team: 2, hp: 10},
-//];
+const gzip = <(string) => Promise<Buffer>>promisify(zlib.gzip);
 
 const DEFAULT_MAP: MapData = {
-    height: 100,
-    width: 100,
-    tiles: Array(100).fill(Array(100).fill('D')),
-    sector_size: 10
+    version: "battlecode 2017 hackathon map",
+    name: "default",
+    teamCount: 2,
+    height: 12,
+    width: 12,
+    tiles: [
+        ['D','D','D','G','D','D','D','D','D','D','G','D'],
+        ['D','D','D','G','D','D','D','D','D','D','G','D'],
+        ['D','D','G','D','D','D','D','D','D','D','G','D'],
+        ['G','G','D','D','D','D','D','D','D','D','G','D'],
+        ['D','D','D','D','D','D','D','D','D','D','D','D'],
+        ['D','D','D','D','D','D','D','D','D','D','D','D'],
+        ['D','D','D','D','D','G','G','D','D','D','D','D'],
+        ['D','D','D','D','D','D','D','D','D','D','D','D'],
+        ['D','G','D','D','D','D','D','D','D','D','G','G'],
+        ['D','G','D','D','D','D','D','D','D','G','D','D'],
+        ['D','G','D','D','D','D','D','D','G','D','D','D'],
+        ['D','G','D','D','D','D','D','D','G','D','D','D'],
+    ],
+    sectorSize: 2,
+    entities: [
+        {id: 0, type: "statue", location: {x:1,y:0}, teamID: 1, hp: 10},
+        {id: 1, type: "statue", location: {x:10,y:11}, teamID: 2, hp: 10},
+        {id: 2, type: "hedge", location: {x:1,y:2}, teamID: 0, hp: 100},
+        {id: 3, type: "hedge", location: {x:2,y:2}, teamID: 0, hp: 100},
+        {id: 4, type: "hedge", location: {x:3,y:2}, teamID: 0, hp: 100},
+        {id: 5, type: "hedge", location: {x:10,y:9}, teamID: 0, hp: 100},
+        {id: 6, type: "hedge", location: {x:9,y:9}, teamID: 0, hp: 100},
+        {id: 7, type: "hedge", location: {x:8,y:9}, teamID: 0, hp: 100},
+        {id: 8, type: "thrower", location: {x:3,y:3}, teamID: 1, hp: 10},
+        {id: 9, type: "thrower", location: {x:8,y:8}, teamID: 2, hp: 10},
+    ]
 };
-const DEFAULT_ENTITIES: EntityData[] = [];
-let id = 0;
-for (let x = 0; x < 10; x++) {
-    for (let y = 0; y < 10; y++) {
-        DEFAULT_ENTITIES.push(
-            {id: id, type: "statue", location: {x:x*10,y:y*10}, team: 1 + (id % 2), hp: 1},
-        );
-        id++;
+
+class Lobby {
+    /**
+     * The ID of this game.
+     */
+    id: GameID;
+
+    /**
+     * The teams passed in the 'create_game' message.
+     */
+    requiredTeams: TeamData[];
+
+    /**
+     * The map the game will be played on.
+     */
+    map: MapData;
+
+    /**
+     * The connected players.
+     */
+    playerTeams: [Client, TeamData][];
+
+    /**
+     * Clients that care about the end of this game.
+     */
+    onEnd: Client[];
+
+    constructor(id: GameID, create: CreateGame, client?: Client) {
+        this.id = id;
+
+        if (typeof create.map === "string") {
+            throw new Error("server map listing unimplemented");
+        } else {
+            this.map = create.map;
+        }
+
+        if (create.teams) {
+            this.requiredTeams = create.teams;
+        } else {
+            this.requiredTeams = [];
+            for (let i = 0; i < this.map.teamCount; i++) {
+                this.requiredTeams.push({
+                    teamID: i+1,
+                    // will be overwritten by login since key is not set
+                    teamName: "UNKNOWN",
+                    botName: "UNKNOWN"
+                });
+            }
+            
+        }
+
+        this.playerTeams = []
+        this.onEnd = [];
+        if (client && create.sendReplay) {
+            this.onEnd.push(client);
+        }
+    }
+
+    login(login: Login, client: Client): GameRunner | undefined {
+        for (let [client_, team] of this.playerTeams) {
+            if (client_.id == client.id) {
+                throw new ClientError("client already connected!");
+            }
+        }
+
+        for (let i = 0; i < this.requiredTeams.length; i++) {
+            const requiredTeam = this.requiredTeams[i];
+            let newTeam: TeamData;
+            if (requiredTeam.key === undefined) {
+                newTeam = {
+                    teamName: login.teamName,
+                    botName: login.botName,
+                    teamID: requiredTeam.teamID
+                };
+            } else {
+                if (login.key !== requiredTeam.key) {
+                    continue;
+                }
+                newTeam = {
+                    // override the bot name from the required requiredTeams (since players are allowed to set it)
+                    botName: login.botName,
+                    // otherwise, take from the game settings (since we're in a locked-down game)
+                    teamName: requiredTeam.teamName,
+                    teamID: requiredTeam.teamID
+                };
+            }
+            // assign player to team
+            this.playerTeams.push([client, newTeam]);
+            this.requiredTeams.splice(i, 1);
+
+            let confirmation: LoginConfirm = {
+                command: "loginConfirm",
+                gameID: this.id,
+                teamID: newTeam.teamID,
+            };
+            client.send(confirmation);
+
+            if (this.requiredTeams.length == 0) {
+                return new GameRunner(this.id, this.map, this.playerTeams, this.onEnd);
+            } else {
+                return undefined;
+            }
+        }
+        if (login.key) {
+            throw new ClientError("incorrect key: "+login.key);
+        } else {
+            throw new Error("lobby already full?");
+        }
+    }
+
+    // returns whether the game should be cancelled because the client shutdown
+    deleteClient(id: ClientID): boolean {
+        for (let i = 0; i < this.playerTeams.length; i++) {
+            if (this.playerTeams[i][0].id == id) {
+                // client was playing, we need to shutdown now
+                return true;
+            }
+        }
+        for (let i = 0; i < this.onEnd.length; i++) {
+            if (this.onEnd[i].id == id) {
+                this.onEnd.splice(i, 1);
+            }
+        }
+        return false;
     }
 }
 
 class GameRunner {
-    listeners: Map<ClientID, Client>;
+    id: GameID;
+    listeners: Client[];
     players: Map<ClientID, TeamID>;
-    state: { state: "setup", teams: Map<ClientID, TeamData>, nextTeamID: number } |
-           { state: "play", game: Game };
+    game: Game;
+    pastTurns: NextTurn[];
+    onEnd: Client[];
+    started: boolean;
+    winner?: TeamData;
 
-    constructor() {
-        this.listeners = new Map();
+    constructor(id: GameID, map: MapData, playerTeams: [Client, TeamData][], onEnd: Client[]) {
+        this.id = id;
+        this.listeners = [];
         this.players = new Map();
-        this.state = { state: 'setup', teams: new Map(), nextTeamID: 1 };
-    }
-
-    addClient(client: Client) {
-        console.log(client.id + " |");
-        if (this.listeners.has(client.id)) {
-            throw new Error("Client already in game: "+client.id);
+        const teams: TeamData[] = [];
+        for (let [client, team] of playerTeams) {
+            this.listeners.push(client);
+            this.players.set(client.id, team.teamID);
+            teams.push(team);
         }
-        this.listeners.set(client.id, client);
-        client.onCommand(this.handleCommand.bind(this));
-        client.onClose(this.handleClose.bind(this));
-
-        if (this.players.size == 2 && this.listeners.size == 3) {
-            this.startGame();
-        }
-    }
-
-    handleCommand(command: IncomingCommand, client: Client) {
-        if (command.command === 'login' && this.state.state === 'setup') {
-            if (this.players.has(client.id)) {
-                throw new Error("Can't log in twice!");
-            }
-
-            // simple way to assign a consecutive team to every player
-            const team = {
-                id: this.state.nextTeamID,
-                name: command.name
-            };
-            this.state.teams.set(client.id, team);
-            this.players.set(client.id, team.id);
-            this.state.nextTeamID++;
-
-            let confirmation: LoginConfirm = {
-                command: "login_confirm",
-                id: team.id,
-                name: team.name,
-            };
-            client.send(confirmation);
-
-            if (this.players.size == 2 && this.listeners.size == 3) {
-                this.startGame();
-            }
-        } else if (command.command === 'make_turn' && this.state.state === 'play') {
-            const teamID = this.players.get(client.id);
-            if (teamID === undefined) {
-                throw new Error("non-player client can't make turn: "+client.id);
-            }
-            const diff = this.state.game.makeTurn(teamID, command.turn, command.actions);
-            this.handleDiff(diff);
-        } else {
-            throw new Error("Invalid command!");
-        }
-    }
-
-    startGame() {
-        if (this.state.state !== "setup") {
-            throw new Error("Game already running!");
-        }
-
-        let teams: TeamData[] = Array.from(this.state.teams.values());
-        // add the neutral team
         teams.push(NEUTRAL_TEAM);
-        teams.sort((a,b) => a.id - b.id);
+        // ensure teams are sorted
+        teams.sort((a,b) => a.teamID - b.teamID);
 
-        this.broadcast({
-            command: 'start',
-            map: DEFAULT_MAP,
-            teams: teams
-        });
-        this.state = {
-            state: 'play',
-            game: new Game(DEFAULT_MAP, teams)
+        this.game = new Game(id, map, teams);
+        this.onEnd = onEnd;
+        this.pastTurns = [];
+        this.started = false;
+
+    }
+
+    async addSpectator(listener: Client) {
+        if (this.listeners.indexOf(listener) != -1) {
+            throw new Error("client already listening?")
         }
-
-        let diff = this.state.game.addInitialEntitiesAndSectors(DEFAULT_ENTITIES);
-        this.handleDiff(diff);
-    }
-
-    handleClose(client: Client) {
-        if (this.players.has(client.id)) {
-            throw new Error("Player disconnected: ");
+        this.listeners.push(listener);
+        if (this.started) {
+            // note: client may start receiving turns before they receive the replay
+            // that's fine, they just need to store them somewhere
+            const replay = await this.makeReplay()
+            listener.send(replay);
         }
-
-        this.listeners.delete(client.id);
-
-        console.log(client.id + ' X');
     }
 
-    broadcast(command: OutgoingCommand) {
-        this.listeners.forEach((client) => {
-            // TODO only serialize once
-            client.send(command);
-        });
+    async start() {
+        const start: GameStart = {
+            command: "start",
+            gameID: this.id,
+            map: this.game.map,
+            teams: this.game.teams
+        };
+        Client.sendToAll(start, this.listeners);
+        this.started = true;
     }
 
-    handleDiff(diff: NextTurn) {
-        if (this.state.state == "setup") throw new Error("Can't broadcast diff in setup");
+    async makeTurn(turn: MakeTurn, client: Client) {
+        const teamID = this.players.get(client.id);
+        if (teamID === undefined) {
+            throw new ClientError("non-player client can't make turn: "+client.id);
+        }
+        const nextTurn = this.game.makeTurn(teamID, turn.turn, turn.actions);
 
-        this.broadcast(diff);
+        Client.sendToAll(nextTurn, this.listeners);
+
+        this.pastTurns.push(nextTurn);
+
+        if (nextTurn.winner) {
+            this.winner = this.game.teams[nextTurn.winner];
+        }
+    }
+
+    async makeReplay(): Promise<GameReplay> {
+        const soFar: MatchData = {
+            version: "battlecode 2017 hackathon match",
+            map: this.game.map,
+            gameID: this.id,
+            teams: this.game.teams,
+            turns: this.pastTurns,
+            winner: this.winner
+        };
+
+        // TODO: do this in another process so we don't block running games?
+        const json = JSON.stringify(soFar);
+        const gzipped: Buffer = await gzip(json);
+        const base64 = gzipped.toString('base64');
+
+        return {
+            command: "gameReplay",
+            matchData: base64,
+            id: this.id
+        }
+    }
+
+    // returns whether the game should be cancelled because the client shutdown
+    deleteClient(id: ClientID): boolean {
+        if (this.players.has(id)) {
+            // client was playing, we need to shutdown now
+            return true;
+        }
+        for (let i = 0; i < this.onEnd.length; i++) {
+            if (this.onEnd[i].id == id) {
+                this.onEnd.splice(i, 1);
+            }
+        }
+        return false;
     }
 }
 
-const gameRunner = new GameRunner();
+const handleCommand = async (command: IncomingCommand, client: Client) => {
+    try {
+        switch (command.command) {
+        case "login":
+            await handleLogin(command, client);
+            break;
+        case "makeTurn":
+            await handleMakeTurn(command, client);
+            break;
+        case "spectateAll":
+            await handleSpectateAll(command, client);
+            break;
+        case "createGame":
+            await handleCreateGame(command, client);
+            break;
+        default:
+            client.send({
+                command: "error",
+                reason: "unimplemented command: "+command.command
+            })
+        }
+    } catch (e) {
+        if (e instanceof ClientError) {
+            // their fault
+            client.send({
+                command: "error",
+                reason: e.message
+            });
+        } else if (e instanceof Error) {
+            // our fault
+            client.send({
+                command: "error",
+                reason: "internal server error: "+e.message
+            });
+            console.error("internal server error:", e.stack);
+        } else {
+            // still our fault
+            client.send({
+                command: "error",
+                reason: "internal server error: "+JSON.stringify(e)
+            });
+            console.error("internal server error:",JSON.stringify(e));
+        }
+    }
+}
 
-console.log('tcp listening on :6172');
+const games: Map<GameID, Lobby | GameRunner> = new Map();
+const playing: Map<ClientID, GameID> = new Map();
+// the id of
+let pickupLobbyID: GameID | undefined;
+let spectators: Client[] = [];
+
+const handleLogin = async (login: Login, client: Client) => {
+    let gameID;
+    if (login.gameID) {
+        gameID = login.gameID;
+    } else {
+        if (pickupLobbyID === undefined) {
+            let pickup = new Lobby(
+                uuid(),
+                {
+                    command: "createGame",
+                    map: DEFAULT_MAP,
+                    sendReplay: false
+                }
+            );
+            games.set(pickup.id, pickup);
+            pickupLobbyID = pickup.id;
+        }
+        gameID = pickupLobbyID;
+    }
+    const game = games.get(gameID);
+    if (game === undefined) {
+        throw new ClientError("no such game: "+login.gameID);
+    }
+    if (game instanceof GameRunner) {
+        throw new ClientError("game already running: "+login.gameID);
+    } 
+    let runner = game.login(login, client);
+    playing.set(client.id, game.id);
+
+    if (runner) {
+        // Lobby has converted into GameRunner
+        games.set(runner.id, runner);
+        for (let spectator of spectators) {
+            runner.addSpectator(spectator);
+        }
+        if (runner.id === pickupLobbyID) {
+            pickupLobbyID = undefined;
+        }
+    }
+}
+
+const handleMakeTurn = async (makeTurn: MakeTurn, client: Client) => {
+    let gameID = playing.get(client.id);
+    if (gameID === undefined) {
+        throw new ClientError("client not playing a game");
+    }
+    let game = games.get(gameID);
+    if (!game) {
+        throw new Error("internal server error, no such game?: "+gameID);
+    }
+    if (game instanceof Lobby) {
+        throw new ClientError("game hasn't started yet")
+    }
+    await game.makeTurn(makeTurn, client);
+}
+
+const handleSpectateAll = async (spectateAll: SpectateAll, client: Client) => {
+    spectators.push(client);
+    for (let game of games.values()) {
+        if (game instanceof GameRunner) {
+            await game.addSpectator(client);
+        }
+    }
+}
+
+const handleCreateGame = async (createGame: CreateGame, client: Client) => {
+    let lobby = new Lobby(uuid(), createGame, client);
+    games.set(lobby.id, lobby);
+}
+
+console.log('tcp listening on :6147');
 let tcpServer = new net.Server((socket) => {
     const client = Client.fromTCP(socket);
-    gameRunner.addClient(client);
+    client.onCommand(handleCommand);
 });
-tcpServer.listen(6172);
+tcpServer.listen(6147);
 
-console.log('ws listening on :6173');
+console.log('ws listening on :6148');
 let httpServer = new http.Server();
 let wsServer = new ws.Server({ server: httpServer });
 wsServer.on('connection', (socket) => {
-    gameRunner.addClient(Client.fromWeb(socket));
+    const client = Client.fromWeb(socket);
+    client.onCommand(handleCommand);
 });
-httpServer.listen(6173);
+httpServer.listen(6148);
 
 console.log('ready.');
 

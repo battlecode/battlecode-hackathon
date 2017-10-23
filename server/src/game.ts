@@ -1,7 +1,8 @@
 import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
-    Location, MapTile, TeamData, TeamID, MapData, NEUTRAL_TEAM } from './schema';
+    Location, MapTile, TeamData, TeamID, MapData, GameID, NEUTRAL_TEAM } from './schema';
 import { Sector } from './zone';
 import LocationMap from './locationmap';
+import ClientError from './error';
 
 function distance(a: Location, b: Location): number {
     var dx = a.x - b.x;
@@ -9,10 +10,10 @@ function distance(a: Location, b: Location): number {
     return dx * dx + dy * dy;
 }
 
-function isOutOfBound(a: Location, world: MapData): boolean {
-    return a.x >= world.width ||
+function isOutOfBound(a: Location, map: MapData): boolean {
+    return a.x >= map.width ||
            a.x < 0 ||
-           a.y >= world.height ||
+           a.y >= map.height ||
            a.y < 0;
 }
 
@@ -24,7 +25,8 @@ const DELAYS = {
 };
 
 export class Game {
-    world: MapData;
+    id: GameID;
+    map: MapData;
     teams: TeamData[];
     entities: Map<EntityID, EntityData>;
     occupied: LocationMap<EntityID>;
@@ -34,19 +36,20 @@ export class Game {
     nextTeam: TeamID;
     nextTurn: number;
 
-    constructor(world: MapData, teams: TeamData[]) {
+    constructor(id: GameID, map: MapData, teams: TeamData[]) {
         validateTeams(teams);
+        this.id = id;
         this.nextTurn = 0;
         this.highestId = 0;
-        this.world = world;
+        this.map = map;
         this.teams = teams;
-        this.nextTeam = teams[1].id;
+        this.nextTeam = teams[1].teamID;
         this.entities = new Map();
-        this.occupied = new LocationMap(world.width, world.height);
-        this.sectors = new LocationMap(world.width, world.height);
+        this.occupied = new LocationMap(map.width, map.height);
+        this.sectors = new LocationMap(map.width, map.height);
 
-        for (var x = 0; x < this.world.width; x += this.world.sector_size) {
-            for(var y = 0; y < this.world.height; y += this.world.sector_size) {
+        for (var x = 0; x < this.map.width; x += this.map.sectorSize) {
+            for(var y = 0; y < this.map.height; y += this.map.sectorSize) {
                 this.sectors.set(x, y, new Sector({y: y, x: x}));
             }
         }
@@ -56,21 +59,22 @@ export class Game {
         let turn = this.nextTurn;
         this.nextTurn++;
         return {
-            command: "next_turn",
+            command: "nextTurn",
+            gameID: this.id,
             turn: turn,
             changed: [],
             dead: [],
-            changed_sectors: [],
+            changedSectors: [],
             successful: [],
             failed: [],
             reasons: [],
-            next_team: this.nextTeam
+            nextTeam: this.nextTeam
         };
     }
 
     addInitialEntitiesAndSectors(entities: EntityData[]): NextTurn {
         if (this.nextTurn !== 0) {
-            throw new Error("Can't add entities except on turn 0");
+            throw new ClientError("Can't add entities except on turn 0");
         }
 
         var diff = this.makeNextTurn();
@@ -79,12 +83,12 @@ export class Game {
             diff.changed.push(ent);
         }
 
-        diff.changed_sectors = [];
+        diff.changedSectors = [];
         for (var sector of this.sectors.values()) {
-            diff.changed_sectors.push(sector);
+            diff.changedSectors.push(sector);
         }
 
-        diff.next_team = this.nextTeam;
+        diff.nextTeam = this.nextTeam;
 
         return diff;
     }
@@ -93,11 +97,11 @@ export class Game {
      * returns Sector based on location
      */  
     getSector(location: Location): Sector {
-        var x = location.x - location.x % this.world.sector_size;
-        var y = location.y - location.y % this.world.sector_size;
+        var x = location.x - location.x % this.map.sectorSize;
+        var y = location.y - location.y % this.map.sectorSize;
         var sector = this.sectors.get(x,y);
         if (!sector) {
-            throw new Error("sector does not exist: "+JSON.stringify(location));
+            throw new ClientError("sector does not exist: "+JSON.stringify(location));
         }
         return sector;
     }
@@ -105,7 +109,7 @@ export class Game {
     addOrUpdateEntity(entity: EntityData) {
         let current = this.occupied.get(entity.location.x, entity.location.y);
         if (current !== undefined && current !== entity.id) {
-            throw new Error("location occupied: "+JSON.stringify(entity)+current);
+            throw new ClientError("location occupied: "+JSON.stringify(entity)+current);
         }
 
         if (this.entities.has(entity.id)) {
@@ -126,7 +130,7 @@ export class Game {
 
     deleteEntity(id: EntityID) {
         if (!this.entities.has(id)) {
-            throw new Error("can't delete nonexistent entity: "+id);
+            throw new ClientError("can't delete nonexistent entity: "+id);
         }
 
         var entity = this.entities.get(id) as EntityData;
@@ -145,10 +149,10 @@ export class Game {
         // player will send the last turn id they received
         const correctTurn = this.nextTurn - 1;
         if (turn !== correctTurn) {
-            throw new Error("wrong turn: given: "+turn+", should be: "+correctTurn);
+            throw new ClientError("wrong turn: given: "+turn+", should be: "+correctTurn);
         }
         if (team !== this.nextTeam) {
-            throw new Error("wrong team for turn: " + team + ", should be: "+this.nextTeam);
+            throw new ClientError("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
         // we never want to give the neutral team a turn
         if (this.nextTeam == this.teams.length - 1) {
@@ -170,8 +174,8 @@ export class Game {
             }
         }
 
-        diff.changed_sectors = this.getChangedSectors();
-        diff.next_team = this.nextTeam;
+        diff.changedSectors = this.getChangedSectors();
+        diff.nextTeam = this.nextTeam;
         return diff;
     }
 
@@ -196,12 +200,12 @@ export class Game {
             if (statue) {
                 // TODO full spawn logic
                 let next = { x: statue.location.x + 1, y: statue.location.y };
-                if (!isOutOfBound(next, this.world) && !this.occupied.has(next.x, next.y)) {
+                if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
                     var newThrower: EntityData = {
                         id: this.highestId + 1,
                         type: "thrower",
                         location: next,
-                        team: statue.team,
+                        teamID: statue.teamID,
                         hp: 10
                     };
                     throwers.push(newThrower);
@@ -220,9 +224,9 @@ export class Game {
             return;
         }
 
-        if (entity.team !== team) {
+        if (entity.teamID !== team) {
             diff.failed.push(action);
-            diff.reasons.push("wrong team: "+entity.team);
+            diff.reasons.push("wrong team: "+entity.teamID);
         }
 
         if (action.action == "disintegrate") {
@@ -233,7 +237,7 @@ export class Game {
             return;
         }
 
-        if (entity.cooldown_end !== undefined && entity.cooldown_end > this.nextTurn) {
+        if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.nextTurn) {
             diff.failed.push(action);
             diff.reasons.push("Entity still on cool down: " + entity.id);
             return;
@@ -247,9 +251,9 @@ export class Game {
                 return;
             }
 
-            if (isOutOfBound(action.loc, this.world)) {
+            if (isOutOfBound(action.loc, this.map)) {
                 diff.failed.push(action);
-                diff.reasons.push("Location out of bounds of world: " + JSON.stringify(action.loc));
+                diff.reasons.push("Location out of bounds of map: " + JSON.stringify(action.loc));
                 return;
             }
 
@@ -275,7 +279,7 @@ export class Game {
                     id: this.highestId + 1,
                     type: "statue",
                     location: action.loc,
-                    team: team,
+                    teamID: team,
                     hp: 1
                 };
             }
@@ -291,7 +295,7 @@ const validateTeams = (teams: TeamData[]) => {
         throw new Error("neutral team is not first!");
     }
     for (let i = 1; i < teams.length; i++) {
-        if (teams[i].id != i) {
+        if (teams[i].teamID != i) {
             throw new Error("invalid team data list");
         }
     }

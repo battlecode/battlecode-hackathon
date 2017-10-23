@@ -1,15 +1,15 @@
 import { SectorData, EntityID, EntityData, TeamID, Location } from './schema';
 
-export class Sector{
+export class Sector {
     teams: Map<TeamID, EntityID[]>;
-    top_left: Location;
-    controlling_team: TeamID;
+    topLeft: Location;
+    controllingTeam: TeamID;
     hasChanged: boolean;
 
-    constructor(top_left: Location) {
+    constructor(topLeft: Location) {
        this.teams = new Map();
-       this.top_left = top_left;
-       this.controlling_team = -1;
+       this.topLeft = topLeft;
+       this.controllingTeam = -1;
        this.hasChanged = false;
     }
 
@@ -32,7 +32,7 @@ export class Sector{
     }
 
     addStatue(statue: EntityData) {
-       var team = this.getOrCreateTeam(statue.team);
+       var team = this.getOrCreateTeam(statue.teamID);
        if (team.indexOf(statue.id) > -1) {
            throw new Error("Statue already exists in Sector"+statue.id);
        }
@@ -41,7 +41,7 @@ export class Sector{
     }
 
     deleteStatue(statue: EntityData) {
-        var team = this.getTeam(statue.team); 
+        var team = this.getTeam(statue.teamID); 
         var index = team.indexOf(statue.id);
         if (index < 0) {
             throw new Error("Can't delete nonexistent statue from sector"+statue.id);
@@ -71,9 +71,9 @@ export class Sector{
     }
     
     updateControllingTeam() {
-        var new_controlling_team = this.getControllingTeamID()
-        if (this.controlling_team != new_controlling_team) {
-            this.controlling_team = new_controlling_team;
+        var newControllingTeam = this.getControllingTeamID()
+        if (this.controllingTeam != newControllingTeam) {
+            this.controllingTeam = newControllingTeam;
             this.hasChanged = true;
         }
     }
@@ -111,13 +111,13 @@ export class Sector{
     * returns id of spawning statue from controlling team or -1 if no team controlling
     */
     getSpawningStatueID(): EntityID {
-        return this.getOldestStatueID(this.controlling_team);
+        return this.getOldestStatueID(this.controllingTeam);
     }
 
     static getSectorData(sector: Sector): SectorData {
         var data: SectorData = {
-            top_left: sector.top_left,
-            controlling_team: sector.controlling_team
+            topLeft: sector.topLeft,
+            controllingTeam: sector.controllingTeam
         }
         return data
     }

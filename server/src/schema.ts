@@ -1,3 +1,6 @@
+/**
+ * The ID of an entity that exists
+ */
 export type EntityID = number;
 
 /**
@@ -7,12 +10,12 @@ export type EntityID = number;
 export type TeamID = number;
 
 /**
- * The ID of a game.
+ * The ID of a gameID. A UUID v4.
  */
 export type GameID = string;
 
 /**
- * The key to a key-protected game.
+ * The key to a key-protected gameID.
  */
 export type PlayerKey = string;
 
@@ -42,31 +45,41 @@ export interface EntityData {
     type: EntityType;
     location: Location;
     hp: number;
-    team: TeamID;
-    cooldown_end?: number;
-    held_by?: boolean;
+    teamID: TeamID;
+    cooldownEnd?: number;
+    heldBy?: boolean;
     holding?: EntityID;
-    holding_end?: number;
+    holdingEnd?: number;
 }
 
 /**
  * The data for a Sector
  */
 export interface SectorData {
-    top_left: Location;
-    controlling_team: TeamID;
+    topLeft: Location;
+    controllingTeam: TeamID;
 }
 
 /**
  * The data for the map.
  * 
- * Note: .bcmap files are simply gzipped MapData JSON objects.
+ * Note: .bch18m files consist of a gzipped MapData JSON object.
  */
 export interface MapData {
+    /**
+     * Required sanity check.
+     */
+    version: "battlecode 2017 hackathon map",
+
     /**
      * The name of the map.
      */
     name: string;
+
+    /**
+     * Number of teams required to play the map (not incl. neutral)
+     */
+    teamCount: number;
 
     /**
      * The height of the map in tiles.
@@ -80,9 +93,9 @@ export interface MapData {
 
     /**
      * Map is partitioned into square Sectors
-     * Each Sector stores Location of its top left corner and covers sector_size * sector_size area 
+     * Each Sector stores Location of its top left corner and covers sectorSize * sectorSize area 
      */
-    sector_size: number;
+    sectorSize: number;
 
     /**
      * Slightly wacky indexing:
@@ -97,18 +110,13 @@ export interface MapData {
      * The initial entities on the map.
      */
     entities: EntityData[];
-
-    /**
-     * The initial sectors of the map.
-     */
-    sectors: SectorData[];
 }
 
 /**
  * Team data.
  */
 export interface TeamData {
-    id: TeamID;
+    teamID: TeamID;
 
     /**
      * The name of the team.
@@ -121,7 +129,7 @@ export interface TeamData {
     botName: string;
 
     /**
-     * The key the player used to login to the game.
+     * The key the player used to login to the gameID.
      * unset if the player used no key.
      */
     key?: PlayerKey;
@@ -131,7 +139,7 @@ export interface TeamData {
  * The neutral team.
  */
 export const NEUTRAL_TEAM: TeamData = {
-    id: 0,
+    teamID: 0,
     teamName: 'neutral',
     botName: 'neutral'
 }
@@ -163,22 +171,12 @@ export interface DisintegrateAction {
     id: EntityID;
 }
 
-/**
- * The data for a completed match.
- * Note: .bh17 files are gzipped MatchData JSON objects.
- */
-export interface MatchData {
-    map: MapData;
-    winner: TeamData;
-    turns: NextTurn[];
-}
-
 ///////////////////////
 // Client -> server. //
 ///////////////////////
 
 /**
- * Request to take part in a game.
+ * Request to take part in a gameID.
  */
 export interface Login {
     command: "login";
@@ -195,34 +193,34 @@ export interface Login {
     botName: string;
     
     /**
-     * The game the player desires to connect to.
-     * If this field is null, the server will make a new game and connect the client to it.
+     * The gameID the player desires to connect to.
+     * If this field is null, the server will make a new gameID and connect the client to it.
      * If the environment variable BATTLECODE_GAME exists, clients should
      * set this field to its value.
      */
-    game?: GameID;
+    gameID?: GameID;
 
     /**
-     * The key to the game, if the game is key-protected.
+     * The key to the gameID, if the gameID is key-protected.
      */
     key?: PlayerKey;
 }
 
 /**
- * Requests the server send all messages for all games.
+ * Requests the server send all messages for all gameIDs.
  * Used by the viewer.
  */
 export interface SpectateAll {
-    command: "spectate_all";
-    game: GameID;
+    command: "spectateAll";
+    gameID: GameID;
 }
 
 /**
  * Tells server to perform a list of action.
  */
 export interface MakeTurn {
-    command: "make_turn";
-    game: GameID;
+    command: "makeTurn";
+    gameID: GameID;
 
     /**
      * Send the turn from the previous NextTurn received.
@@ -239,18 +237,17 @@ export interface MakeTurn {
  * Confirms that a player has been logged in.
  */
 export interface LoginConfirm {
-    command: "login_confirm";
-    game: GameID;
-    name: string;
-    id: TeamID;
+    command: "loginConfirm";
+    gameID: GameID;
+    teamID: TeamID;
 }
 
 /**
- * Notifies clients that a game has started.
+ * Notifies clients that a gameID has started.
  */
 export interface GameStart {
     command: "start";
-    game: GameID;
+    gameID: GameID;
     map: MapData;
     teams: TeamData[];
 }
@@ -259,19 +256,19 @@ export interface GameStart {
  * Notifies clients about the current turn / world state.
  */
 export interface NextTurn {
-    command: "next_turn";
-    game: GameID;
+    command: "nextTurn";
+    gameID: GameID;
     turn: number;
 
     changed: EntityData[];
     dead: EntityID[];
-    changed_sectors: SectorData[];
+    changedSectors: SectorData[];
 
     successful: Action[];
     failed: Action[];
     reasons: string[];
 
-    next_team: TeamID;
+    nextTeam: TeamID;
     winner?: TeamID;
 }
 
@@ -296,54 +293,109 @@ export interface Keyframe {
 // Extra control //
 ///////////////////
 
+// Note: client implementations in new languages need not implement the following commands.
+
 /**
- * Create a game but do not participate.
- * At the end of the game, a GameData will be sent, containing all the information for the game.
+ * Create a gameID but do not participate.
+ * At the end of the gameID, a GameData will be sent, containing all the information for the gameID.
  */
 export interface CreateGame {
-    command: "create_game";
+    command: "createGame";
 
     /**
-     * The key to the server.
+     * The key to the server, if the server is password-protected.
      */
-    serverKey: string;
+    serverKey?: string;
 
     /**
-     * The teams that will be participating in the game.
+     * The teams that will be participating in the gameID.
      * Note: player .botName will override the .botName set here.
      * If keys are set, players will be assigned to teams based on keys.
+     * Otherwise, players will be assigned in order of connection.
      */
-    teams: TeamData[];
+    teams?: TeamData[];
 
     /**
-     * The map the game will be played on.
-     * Use a string to load a built-in map file.
+     * The map the gameID will be played on.
+     * Use a string to load a built-in map file with that name (case sensitive.)
      */
-    map: MapData[] | string;
+    map: MapData | string;
+
+    /**
+     * States that the client is interested in receiving a replay when the game is complete.
+     */
+    sendReplay?: boolean;
 }
 
 export interface CreateGameConfirm {
-    command: "create_game_confirm";
+    command: "createGameIDConfirm";
 
-    game: GameID;
+    gameID: GameID;
+}
+
+export interface ListMapsRequest {
+    command: "listMapsRequest";
+}
+
+export interface ListMapsResponse {
+    command: "listMapsResponse";
+
+    mapNames: string[];
+    maps: MapData[];
+}
+
+export interface ListReplaysRequest {
+    command: "listReplaysRequest";
+}
+
+export interface ListReplaysResponse {
+    command: "listReplaysResponse";
+
+    replayIDs: GameID[];
+    replayNames: string[];
+    replayTeams: TeamData[][];
+}
+
+export interface ReplayRequest {
+    command: "replayRequest",
+    id: GameID;
 }
 
 /**
- * Data sent 
+ * Data sent to catch a client up to the current state of the gameID.
+ * Optionally sent at the end of the gameID to whoever created it.
  */
-export interface GameData {
-    command: "game_data";
+export interface GameReplay {
+    command: "gameReplay";
 
-    /**
-     * The winner of the match.
-     */
-    winner: TeamData;
+    // Note: this data is also included in the match data; these fields are provided
+    // to make life simpler for the consumer
+
+    id: GameID;
+    winner?: TeamData;
 
     /**
      * The completed match.
      * A base64-encoded gzipped MatchData.
      */
-    game_file: string;
+    matchData: string;
+}
+
+/**
+ * The data for a finished match.
+ * Note that .bch18 files consist of a gzipped MatchData JSON object.
+ */
+export interface MatchData {
+    /**
+     * Required sanity check.
+     */
+    version: "battlecode 2017 hackathon match",
+
+    gameID: GameID;
+    map: MapData;
+    winner?: TeamData;
+    teams: TeamData[];
+    turns: NextTurn[];
 }
 
 /**
@@ -354,5 +406,7 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
 /**
  * Message types
  */
-export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame;
-export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | ClientError | Keyframe;
+export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
+    ListReplaysRequest | ReplayRequest;
+export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | ClientError | Keyframe |
+    ListMapsResponse | GameReplay;

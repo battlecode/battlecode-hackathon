@@ -243,6 +243,12 @@ export class Game {
                 return;
             }
 
+            if(pickup.type !== "thrower") {
+                diff.failed.push(action);
+                diff.reasons.push("Entity can only pick up Thrower, not: " + pickup.type);
+                return;
+            }
+
             if(distance(entity.location, pickup.location) > 2) {
                 diff.failed.push(action);
                 diff.reasons.push("Pickup distance too far: Entity: " + JSON.stringify(entity.location)
@@ -252,7 +258,7 @@ export class Game {
 
             if(entity.held_by) {
                 diff.failed.push(action);
-                diff.reasons.push("Held Entity cannot hold another entity" + entity.id)
+                diff.reasons.push("Held Entity cannot hold another entity: " + entity.id)
                 return;
             }
 
@@ -296,14 +302,14 @@ export class Game {
         if (action.action === "throw") {
             if (!entity.holding) {
                 diff.failed.push(action);
-                diff.reasons.push("Entity is not holding anything to throw" + entity.id)
+                diff.reasons.push("Entity is not holding anything to throw: " + entity.id)
                 return;
             }
 
             var held = this.entities.get(entity.holding)
             if (!held) {
                 diff.failed.push(action);
-                diff.reasons.push("Held entity does not exist" + entity.holding)
+                diff.reasons.push("Held entity does not exist: " + entity.holding)
                 return;
             }
 

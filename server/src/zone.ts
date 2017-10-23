@@ -72,7 +72,7 @@ export class Sector{
     
     updateControllingTeam() {
         var new_controlling_team = this.getControllingTeamID()
-        if (this.controlling_team != new_controlling_team) {
+        if (this.controlling_team !== new_controlling_team) {
             this.controlling_team = new_controlling_team;
             this.hasChanged = true;
         }
@@ -100,7 +100,7 @@ export class Sector{
         }
 
         for (var statue of this.getTeam(team)) {
-            if (oldest == -1 || statue < oldest) {
+            if (oldest === -1 || statue < oldest) {
                 oldest = statue;
             }
         }

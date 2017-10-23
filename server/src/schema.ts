@@ -153,7 +153,9 @@ export interface PickupAction {
 export interface ThrowAction {
     action: "throw";
     id: EntityID;
-    loc: Location;
+    // Entity throwing in dx, dy direction 
+    dx: number;
+    dy: number;
 }
 export interface BuildAction {
     action: "build";

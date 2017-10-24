@@ -4,22 +4,26 @@ import random
 
 game = battlecode.Game('testplayer')
 
+
 rounds = 0
 
 start = time.clock()
 
 while True:
-    #time.sleep(.1)
     game.next_turn()
+    state = game.get_current_state()
 
-    rounds += 1
 
-    for entity in game.entities.values():
-        if entity.team == game.team:
+    for entity in state.entities.values():
+        if entity.team == game.myteam:
             entity.queue_move(battlecode.Location(
                 entity.location.x + random.randint(-1,2),
                 entity.location.y + random.randint(-1,2)
             ))
+
+    print(state.turn)
+    if(state.turn > 200):
+        break
 
 end = time.clock()
 print('clock time: '+str(end - start))

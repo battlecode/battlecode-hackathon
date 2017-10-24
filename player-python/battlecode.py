@@ -1,7 +1,7 @@
 '''Play battlecode hackathon games.'''
 
 import socket
-import json
+import ujson as json
 import math
 import io
 import time
@@ -36,7 +36,8 @@ class Entity(object):
         self.holding_end = None
         self.held_by = None
         self.holding = None
-    
+        self._state = game.state
+
     def _update(self, data):
         self.id = data['id']
         self.type = data['type']
@@ -50,20 +51,20 @@ class Entity(object):
         if 'cooldown_end' in data:
             self.cooldown_end = data['cooldown_end']
         else: 
-            self.cooldown_end = self._game.turn
+            self.cooldown_end = self._state.turn
 
         if 'holding_end' in data:
             self.holding_end = data['holding_end']
         else:
-            self.holding_end = self._game.turn
+            self.holding_end = self._state.turn
 
         if 'held_by' in data:
-            self.held_by = self._game.entities[data['held_by']]
+            self.held_by = self._state.entities[data['held_by']]
         else:
             self.held_by = None
 
         if 'holding' in data:
-            self.holding = self._game.entities[data['holding']]
+            self.holding = self._state.entities[data['holding']]
         else:
             self.holding = None
 
@@ -72,12 +73,17 @@ class Entity(object):
         '''The number of turns left in this entity's cooldown.'''
         if self.cooldown_end is None:
             return 0
-        return max(self._game.turn - self.cooldown_end, 0)
+        return max(self._state.turn - self.cooldown_end, 0)
 
     @property
     def turns_until_drop(self):
         '''The number of turns until this entity drops its held entity.'''
-        return max(self._game.turn - self.holding_end, 0)
+        return max(self.holding_end - self._state.turn, 0)
+
+
+    @property
+    def can_move(self):
+        return (self.cooldown_end == self._state.turn)
 
     def queue_move(self, location):
         '''Queues a move, so that this object will move in the next turn.'''
@@ -97,6 +103,8 @@ class Entity(object):
             'action': 'disintegrate',
             'id': self.id
         })
+
+
 
 class Location(object):
     '''An x,y location in the world.'''
@@ -156,6 +164,19 @@ class _LineIO(io.RawIOBase):
     def seekable(self):
         return False
 
+class State(object):
+    def __init__(self, turn, entities):
+        # initialize other state
+        self._action_queue = []
+        self.turn = turn
+        self.entities = entities
+
+
+    @property
+    def get_turn(self):
+        return self.turn
+
+
 class Game(object):
     '''A game that's currently running.'''
 
@@ -183,26 +204,25 @@ class Game(object):
         assert resp['command'] == 'login_confirm'
         assert resp['name'] == team_name
 
-        team_id = resp['id']
 
         # wait for the start command
         start = self._recv()
         assert start['command'] == 'start'
 
-        self.teams = {}
+        team_id = resp['id']
+        teams = {}
         for team in start['teams']:
             team = Team(**team)
-            self.teams[team.id] = team
+            teams[team.id] = team
+        team = teams[team_id]
 
-        self.team = self.teams[team_id]
 
+        self.teams = teams
+        self.myteam = team
         self.map = Map(**start['map'])
+        self.state = State(0, {})
 
         # initialize other state
-        self.turn = 0
-        self.entities = {}
-
-        self._action_queue = []
 
         # wait for our first turn
         # TODO: run messaging logic on another thread?
@@ -243,33 +263,33 @@ class Game(object):
         while True:
             turn = self._recv()
             assert turn['command'] == 'next_turn'
-            self.turn = turn['turn']
+            new_state = State(turn['turn'], self.state.entities)
+            self.state = new_state
             if 'winner' in turn:
                 # TODO
                 raise Exception('Game finished')
 
             for dead in turn['dead']:
-                del self.entities[dead]
+                del self.state.entities[dead]
 
             for entity in turn['changed']:
                 id = entity['id']
-                if id not in self.entities:
-                    self.entities[id] = Entity(self)
-                self.entities[id]._update(entity)
+                if id not in self.state.entities:
+                    self.state.entities[id] = Entity(self)
+                self.state.entities[id]._update(entity)
 
-            if turn['next_team'] == self.team.id:
+            if turn['next_team'] == self.myteam.id:
                 return
-
-
 
     def _submit_turn(self):
         self._send({
             'command': 'make_turn',
-            'turn': self.turn,
-            'actions': self._action_queue
+            'turn': self.state.turn,
+            'actions': self.state._action_queue
         })
-        del self._action_queue[:]
 
     def _queue(self, action):
-        self._action_queue.append(action)
+        self.state._action_queue.append(action)
 
+    def get_current_state(self):
+        return self.state

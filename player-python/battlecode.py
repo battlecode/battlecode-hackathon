@@ -1,7 +1,7 @@
 '''Play battlecode hackathon games.'''
 
 import socket
-import json
+import ujson as json
 import math
 import io
 import time
@@ -144,18 +144,6 @@ class Team(object):
     def __repr__(self):
         return str(self)
 
-class _LineIO(io.RawIOBase):
-    '''Magic class to split an input socket into lines.'''
-    def __init__(self, sock):
-        self.sock = sock
-
-    def read(self, sz=-1):
-        if (sz == -1): sz=0x7FFFFFFF
-        return self.sock.recv(sz)
-
-    def seekable(self):
-        return False
-
 class Game(object):
     '''A game that's currently running.'''
 
@@ -167,10 +155,11 @@ class Game(object):
                'invalid team name: '+unicode(team_name)
 
         # setup connection
-        self._socket = socket.socket()
-        #self._socket.settimeout(1) # second
-        self._socket.connect(server)
-        self._lineio = _LineIO(self._socket)
+        conn = socket.socket()
+        conn.settimeout(5)
+        conn.connect(server)
+
+        self._socket = conn.makefile('rwb', 4096)
 
         # send login command
         self._send({
@@ -213,24 +202,17 @@ class Game(object):
         '''Send a dictionary as JSON to the server.
         See server/src/schema.ts for valid messages.'''
 
-        message_b = json.dumps(message).encode('utf-8')
-        self._socket.sendall(message_b)
-        self._socket.send(b'\n')
+        message = json.dumps(message)
+        self._socket.write(message.encode('utf-8'))
+        self._socket.write(b'\n')
+        self._socket.flush()
 
     def _recv(self):
         '''Receive a '\n'-delimited JSON message from the server.
         See server/src/schema.ts for valid messages.'''
-        while True:
-            message = self._lineio.readline()
-            if len(message) > 0:
-                break
-            # TODO: this is VERY WRONG
-            # we should write our own newline parsing instead of using the jank
-            # newline thing we're doing now
-            # this library really likes to spin forever
-            time.sleep(.1)
+        # next() reads lines from a file object
+        message = next(self._socket)
 
-        message = message.decode('utf-8')
         result = json.loads(message)
         return result
 

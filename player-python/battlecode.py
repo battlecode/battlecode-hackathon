@@ -1,5 +1,5 @@
 '''Play battlecode hackathon games.'''
-
+from enum import Enum
 import socket
 import ujson as json
 import math
@@ -14,6 +14,24 @@ STATUE = 'statue'
 
 GRASS = 'G'
 DIRT = 'D'
+
+def direction_rotate_degrees_clockwise(direction, degrees):
+    assert (degrees %45 == 0), "Rotation must be a multiple of 45 degrees"
+
+    return Direction((direction.value+degrees/45%8))
+
+class Direction(Enum):
+    ''' This is an enum for direction '''
+    NORTH = 0
+    NORTH_EAST = 1
+    EAST = 2
+    SOUTH_EAST = 3
+    SOUTH = 4
+    SOUTH_WEST = 5
+    WEST = 6
+    NORTH_WEST = 7
+
+        
 
 class Entity(object):
     '''
@@ -36,7 +54,13 @@ class Entity(object):
         self.holding_end = None
         self.held_by = None
         self.holding = None
-        self._state = game.state
+
+    def __str__(self):
+        return 'id:{},type:{},team:{},location:{}>'.format(self.id, self.type, self.team,
+                self.location)
+
+    def __repr__(self):
+        return str(self)
 
     def _update(self, data):
         self.id = data['id']
@@ -51,20 +75,20 @@ class Entity(object):
         if 'cooldown_end' in data:
             self.cooldown_end = data['cooldown_end']
         else: 
-            self.cooldown_end = self._state.turn
+            self.cooldown_end = 0
 
         if 'holding_end' in data:
             self.holding_end = data['holding_end']
         else:
-            self.holding_end = self._state.turn
+            self.holding_end = 0
 
         if 'held_by' in data:
-            self.held_by = self._state.entities[data['held_by']]
+            self.held_by = self._game.state.entities[data['held_by']]
         else:
             self.held_by = None
 
         if 'holding' in data:
-            self.holding = self._state.entities[data['holding']]
+            self.holding = self._game.state.entities[data['holding']]
         else:
             self.holding = None
 
@@ -73,21 +97,94 @@ class Entity(object):
         '''The number of turns left in this entity's cooldown.'''
         if self.cooldown_end is None:
             return 0
-        return max(self._state.turn - self.cooldown_end, 0)
+        return max(self._game.state.turn - self.cooldown_end, 0)
 
     @property
     def turns_until_drop(self):
         '''The number of turns until this entity drops its held entity.'''
-        return max(self.holding_end - self._state.turn, 0)
-
+        return max(self.holding_end - self._game.state.turn, 0)
 
     @property
-    def can_move(self):
-        return (self.cooldown_end == self._state.turn)
+    def is_robot(self):
+        return self.type == THROWER
 
-    def queue_move(self, location):
+    @property
+    def is_statue(self):
+        return self.statue == STATUE
+
+    @property
+    def is_holding(self):
+        return self.holding != None
+
+    @property
+    def can_act(self):
+        ''' Returns true if this is a robot with no cooldown. If either is
+        false then this entity cannot perform any actions this turn.'''
+        return ((self.cooldown_end <= self._game.state.turn) and self.is_robot)
+
+    @property
+    def can_be_picked(self):
+        ''' Returns true if the entitiy can be picked up. Otherwise returns
+        false'''
+
+        return self.is_robot and not self.is_holding
+
+    def can_move(self, direction):
+        ''' Returns true if the robot can move in a given direction. False
+        otherwise.'''
+
+        if not self.can_act:
+            return False
+
+        location = self.location.adjaent_location_in_direction(direction)
+        entity = self._game.state.entity_at_location(location)
+
+        if entity != None:
+            return False
+        return True
+
+
+    def can_pickup(self, entity):
+        ''' Rreturns true if entity can pickup another entitiy in given
+        direction. Otherwise returns False.'''
+
+        if __debug__:
+            assert isinstance(entity, Entity), 'Parameter ' + str(entity) + \
+                "is not an entity"
+
+        if not self.can_act:
+            return False
+
+        distance_to = self.location.distance_to_squared(entity.location)
+        if entity == None or not entity.can_be_picked or not distance_to <=2:
+            return False
+        else:
+            return True
+
+
+    def queue_move(self, direction):
+        '''Queues a move, so that this object will move one square in given
+        direction in the next turn.'''
+        location = self.location.adjaent_location_in_direction(direction)
+
+        if __debug__:
+            assert isinstance(location, Location), "Can't move to a non-location!"
+            assert self.can_move(direction), "Invalid move cannot move in given direction"
+
+        self._game._queue({
+            'action': 'move',
+            'id': self.id,
+            'loc': {
+                'x': location.x,
+                'y': location.y
+            }
+        })
+
+    def queue_move_location(self, location):
         '''Queues a move, so that this object will move in the next turn.'''
-        assert isinstance(location, Location), "Can't move to a non-location!"
+        if __debug__:
+            assert isinstance(location, Location), "Can't move to a non-location!"
+
         self._game._queue({
             'action': 'move',
             'id': self.id,
@@ -104,14 +201,57 @@ class Entity(object):
             'id': self.id
         })
 
+    def queue_throw(self, direction):
+        '''Queues a move, so that this object will throw held object one square
+        in given direction in the next turn.'''
+        if __debug__:
+            assert self.holding != None, "Not Holding anything"
+
+        location = self.location.adjaent_location_in_direction(direction)
+        self._game._queue({
+            'action': 'throw',
+            'id': self.id ,
+            'loc': {
+                'x': location.x,
+                'y': location.y
+            }
+        })
+
+    def queue_pickup(self, entity):
+        if __debug__:
+            assert self.can_pickup(entity), "Invalid Pickup Command"
+        print("Trying to pickup")
+        self._game._queue({
+            'action': 'pickup',
+            'id': self.id ,
+            'pickupid': entity.id
+        })
+
+
+    '''entities within a certain distance'''
+    def entities_within_distance(self, distance):
+        near_entities = []
+        for entity in self._game.state.entities.values():
+            if self.location.distance_to(entity.location) < distance:
+                near_entities.append(entity)
+
+        near_entities.remove(self)
+        return near_entities
+
+    '''Entities within a certain distance squared.'''
+    def entities_within_distance_squared(self, distance):
+        #TODO actually implement this fully
+        return self.entities_within_distance(distance**2)
+
 
 
 class Location(object):
     '''An x,y location in the world.'''
 
     def __init__(self, x, y):
-        assert isinstance(x, int) or math.floor(x) == x, 'non-integer location: '+str(x)
-        assert isinstance(y, int) or math.floor(y) == y, 'non-integer location: '+str(y)
+        if __debug__:
+            assert isinstance(x, int) or math.floor(x) == x, 'non-integer location: '+str(x)
+            assert isinstance(y, int) or math.floor(y) == y, 'non-integer location: '+str(y)
 
         self.x = int(x)
         self.y = int(y)
@@ -122,7 +262,63 @@ class Location(object):
     def __repr__(self):
         return str(self)
 
-    # TODO: more methods
+    def distance_to_squared(self, location):
+        return (location.x-self.x)**2+(location.y-self.y)**2
+
+    def distance_to(self, location):
+        return int(math.sqrt((location.x-self.x)**2+(location.y-self.y)**2))
+
+    def direction_to(self, location):
+        if __debug__:
+            assert (location!=self), "Can not find direction to same location"
+
+        delx = location.x-self.x
+        dely = location.y-self.y
+        if(dely > 0 and delx>0):
+            return Direction.NORTH_EAST
+        elif(dely > 0 and delx < 0):
+            return Direction.NORTH_WEST
+        elif(dely > 0 and delx == 0):
+            return Direction.NORTH
+        elif(delx>0):
+            return Direction.SOUTH_EAST
+        elif(delx < 0):
+            return Direction.SOUTH_WEST
+        else:
+            return Direction.SOUTH
+
+    def adjaent_location_in_direction(self, direction):
+        if direction == Direction.NORTH:
+            delx = 0
+            dely = 1
+        elif direction == Direction.NORTH_EAST:
+            delx = 1 
+            dely = 1 
+        elif direction == Direction.NORTH_WEST:
+            delx = -1 
+            dely = 1
+        elif direction == Direction.SOUTH:
+            delx = 0
+            dely = 1
+        elif direction == Direction.SOUTH_EAST:
+            delx = 1
+            dely = -1
+        elif direction == Direction.SOUTH_WEST:
+            delx = -1
+            dely = -1
+        elif direction == Direction.EAST:
+            delx = 1
+            dely = 0
+        elif direction == Direction.WEST:
+            delx = -1
+            dely = 0
+        else:
+            delx = 0
+            dely = 0
+            if __debug__:
+                assert False, "Invalid Direction Given"
+        return Location(self.x+delx, self.y+dely)
+
 
 class Map(object):
     '''A game map.'''
@@ -171,10 +367,29 @@ class State(object):
         self.turn = turn
         self.entities = entities
 
+        self.entities_by_location = {}
+
+        for entity in self.entities.values():
+            self.entities_by_location[entity.location] = entity
+
 
     @property
     def get_turn(self):
         return self.turn
+
+    @property 
+    def turn_next_spawn(self):
+        return ((self.turn-1)//10+1)*10
+
+    def entity_at_location(self, location):
+        ''' Returns the entitiy at a given location'''
+        return self.entities_by_location.get(location,None)
+
+    def is_location_occupied(self, location):
+        ''' Return true if there is an entity at given location'''
+        return (self.entity_at_location(location)!=None)
+
+
 
 
 class Game(object):
@@ -220,9 +435,9 @@ class Game(object):
         self.teams = teams
         self.myteam = team
         self.map = Map(**start['map'])
+        # initialize state info
         self.state = State(0, {})
 
-        # initialize other state
 
         # wait for our first turn
         # TODO: run messaging logic on another thread?

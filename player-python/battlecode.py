@@ -16,9 +16,45 @@ GRASS = 'G'
 DIRT = 'D'
 
 def direction_rotate_degrees_clockwise(direction, degrees):
-    assert (degrees %45 == 0), "Rotation must be a multiple of 45 degrees"
+    if __debug__:
+        assert (degrees %45 == 0), "Rotation must be a multiple of 45 degrees"
 
-    return Direction((direction.value+degrees/45%8))
+    return Direction((direction.value+degrees//45%8))
+
+def direction_to_delta(directio):
+    ''' Take a direction and return a delta x and delta y to go in that
+    direction '''
+    if direction == Direction.NORTH:
+        delx = 0
+        dely = 1
+    elif direction == Direction.NORTH_EAST:
+        delx = 1 
+        dely = 1 
+    elif direction == Direction.NORTH_WEST:
+        delx = -1 
+        dely = 1
+    elif direction == Direction.SOUTH:
+        delx = 0
+        dely = 1
+    elif direction == Direction.SOUTH_EAST:
+        delx = 1
+        dely = -1
+    elif direction == Direction.SOUTH_WEST:
+        delx = -1
+        dely = -1
+    elif direction == Direction.EAST:
+        delx = 1
+        dely = 0
+    elif direction == Direction.WEST:
+        delx = -1
+        dely = 0
+    else:
+        delx = 0
+        dely = 0
+        if __debug__:
+            assert False, "Invalid Direction Given"
+    return (delx, dely)
+    
 
 class Direction(Enum):
     ''' This is an enum for direction '''
@@ -138,8 +174,9 @@ class Entity(object):
 
         location = self.location.adjaent_location_in_direction(direction)
         entity = self._game.state.entity_at_location(location)
+        on_map = self._game.map.location_on_map(location)
 
-        if entity != None:
+        if ((not on_map) or not (entity == None)):
             return False
         return True
 
@@ -151,6 +188,10 @@ class Entity(object):
         if __debug__:
             assert isinstance(entity, Entity), 'Parameter ' + str(entity) + \
                 "is not an entity"
+            assert (self != entity), "You can't pickup yourself"
+
+        if entity == self:
+            return False
 
         if not self.can_act:
             return False
@@ -288,37 +329,19 @@ class Location(object):
             return Direction.SOUTH
 
     def adjaent_location_in_direction(self, direction):
-        if direction == Direction.NORTH:
-            delx = 0
-            dely = 1
-        elif direction == Direction.NORTH_EAST:
-            delx = 1 
-            dely = 1 
-        elif direction == Direction.NORTH_WEST:
-            delx = -1 
-            dely = 1
-        elif direction == Direction.SOUTH:
-            delx = 0
-            dely = 1
-        elif direction == Direction.SOUTH_EAST:
-            delx = 1
-            dely = -1
-        elif direction == Direction.SOUTH_WEST:
-            delx = -1
-            dely = -1
-        elif direction == Direction.EAST:
-            delx = 1
-            dely = 0
-        elif direction == Direction.WEST:
-            delx = -1
-            dely = 0
-        else:
-            delx = 0
-            dely = 0
-            if __debug__:
-                assert False, "Invalid Direction Given"
+        (delx, dely) = direction_to_delta(direction)
         return Location(self.x+delx, self.y+dely)
 
+    def location_in_direction(self, direction, distance):
+
+        if __debug__:
+            assert (distance >0), "Distance has to be greater than 0"
+
+        (delx, dely) = direction_to_delta(direction)
+        delx = delx*distance
+        dely = dely*distance
+        return Location(self.x+delx, self.y+dely)
+    
 
 class Map(object):
     '''A game map.'''
@@ -331,6 +354,14 @@ class Map(object):
     def tile_at(self, location):
         '''Get the tile at a location.'''
         return self.tiles[location.y][location.x]
+
+    def location_on_map(self, location):
+        if __debug__:
+            assert isinstance(location, Location), "Must pass a location"
+        x = location.x
+        y = location.y
+        return ((y>0 and y < height) and (x>0 and x < width))
+
 
 class Team(object):
     '''Information about a team.'''
@@ -383,7 +414,7 @@ class State(object):
 
     def entity_at_location(self, location):
         ''' Returns the entitiy at a given location'''
-        return self.entities_by_location.get(location,None)
+        return self.entities_by_location.get(location, None)
 
     def is_location_occupied(self, location):
         ''' Return true if there is an entity at given location'''

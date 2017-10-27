@@ -182,7 +182,7 @@ export class Game {
             if (entity.holding_end && entity.holding_end < this.nextTurn && entity.holding) {
                 entity.hp -= 1;
                 if (entity.hp > 0) {
-                    diff.changed.push(entity)
+                    diff.changed.push(entity);
                 }
                 else {
                     this.deleteEntity(entity.id);
@@ -276,32 +276,32 @@ export class Game {
             if(distance(entity.location, pickup.location) > 2) {
                 diff.failed.push(action);
                 diff.reasons.push("Pickup distance too far: Entity: " + JSON.stringify(entity.location)
-                    + " Pickup: " + JSON.stringify(pickup.location))
+                    + " Pickup: " + JSON.stringify(pickup.location));
                 return;
             }
 
             if(entity.held_by) {
                 diff.failed.push(action);
-                diff.reasons.push("Held Entity cannot hold another entity: " + entity.id)
+                diff.reasons.push("Held Entity cannot hold another entity: " + entity.id);
                 return;
             }
 
             if(entity.holding) {
                 diff.failed.push(action);
                 diff.reasons.push("Entity already holding another entity: " + entity.id 
-                    + " holding: " + entity.holding)
+                    + " holding: " + entity.holding);
                 return;
             }
 
             if(pickup.held_by) {
                 diff.failed.push(action);
-                diff.reasons.push("Pickup target already held by another entity: " + pickup.id)
+                diff.reasons.push("Pickup target already held by another entity: " + pickup.id);
                 return;
             }
 
             if(pickup.holding) {
                 diff.failed.push(action);
-                diff.reasons.push("Pickup target holding another entity: " + pickup.id)
+                diff.reasons.push("Pickup target holding another entity: " + pickup.id);
                 return;
             }
 
@@ -312,8 +312,8 @@ export class Game {
             pickup.location = entity.location;
             this.occupied.delete(pickup.location.x, pickup.location.y);
             
-            diff.successful.push(action)
-            diff.changed.push(entity, pickup)
+            diff.successful.push(action);
+            diff.changed.push(entity, pickup);
             return;
         }
 
@@ -327,14 +327,14 @@ export class Game {
         if (action.action === "throw") {
             if (!entity.holding) {
                 diff.failed.push(action);
-                diff.reasons.push("Entity is not holding anything to throw: " + entity.id)
+                diff.reasons.push("Entity is not holding anything to throw: " + entity.id);
                 return;
             }
 
             var held = this.entities.get(entity.holding)
             if (!held) {
                 diff.failed.push(action);
-                diff.reasons.push("Held entity does not exist: " + entity.holding)
+                diff.reasons.push("Held entity does not exist: " + entity.holding);
                 return;
             }
 
@@ -390,7 +390,7 @@ export class Game {
                     diff.changed.push(target);
                 }
             }
-            diff.changed.push(entity, held)
+            diff.changed.push(entity, held);
         }
 
         if (action.action === "move" || action.action === "build") {

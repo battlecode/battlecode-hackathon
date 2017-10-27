@@ -101,25 +101,25 @@ class Entity(object):
     def _update(self, data):
         self.id = data['id']
         self.type = data['type']
-        self.team = self._game.teams[data['team']]
+        self.team = self._game.teams[data['teamID']]
         self.hp = data['hp']
         if 'location' in data:
             self.location = Location(data['location']['x'], data['location']['y'])
         else:
             self.location = None
 
-        if 'cooldown_end' in data:
-            self.cooldown_end = data['cooldown_end']
-        else:
-            self.cooldown_end = 0
+        if 'cooldownEnd' in data:
+            self.cooldown_end = data['cooldownEnd']
+        else: 
+            self.cooldown_end = self._game.state.turn
 
-        if 'holding_end' in data:
-            self.holding_end = data['holding_end']
+        if 'holdingEnd' in data:
+            self.holding_end = data['holdingEnd']
         else:
             self.holding_end = 0
 
-        if 'held_by' in data:
-            self.held_by = self._game.state.entities[data['held_by']]
+        if 'heldBy' in data:
+            self.held_by = self._game.entities[data['heldBy']]
         else:
             self.held_by = None
 
@@ -138,7 +138,6 @@ class Entity(object):
     @property
     def turns_until_drop(self):
         '''The number of turns until this entity drops its held entity.'''
-        return max(self.holding_end - self._game.state.turn, 0)
 
     @property
     def is_robot(self):
@@ -217,6 +216,7 @@ class Entity(object):
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.can_move(direction), "Invalid move cannot move in given direction"
 
+        print("Sending move queue")
         self._game._queue({
             'action': 'move',
             'id': self.id,
@@ -389,26 +389,15 @@ class Team(object):
     def __repr__(self):
         return str(self)
 
-class _LineIO(io.RawIOBase):
-    '''Magic class to split an input socket into lines.'''
-    def __init__(self, sock):
-        self.sock = sock
-
-    def read(self, sz=-1):
-        if (sz == -1): sz=0x7FFFFFFF
-        return self.sock.recv(sz)
-
-    def seekable(self):
-        return False
-
 class State(object):
     def __init__(self, turn, entities):
         # initialize other state
-        self._action_queue = []
         self.turn = turn
         self.entities = entities
 
         self.entities_by_location = {}
+
+        self._action_queue = []
 
         for entity in self.entities.values():
             self.entities_by_location[entity.location] = entity
@@ -430,54 +419,52 @@ class State(object):
         ''' Return true if there is an entity at given location'''
         return (self.entity_at_location(location)!=None)
 
-
-
-
 class Game(object):
     '''A game that's currently running.'''
 
-    def __init__(self, team_name, server=('localhost', 6172)):
+    def __init__(self, name, server=('localhost', 6147)):
         '''Connect to the server and wait for the first turn.'''
 
-        assert isinstance(team_name, str) \
-               and len(team_name) > 5 and len(team_name) < 100, \
-               'invalid team name: '+unicode(team_name)
+        assert isinstance(name, str) \
+               and len(name) > 5 and len(name) < 100, \
+               'invalid team name: '+unicode(name)
 
         # setup connection
-        self._socket = socket.socket()
-        #self._socket.settimeout(1) # second
-        self._socket.connect(server)
-        self._lineio = _LineIO(self._socket)
+        conn = socket.socket()
+        # conn.settimeout(5)
+        conn.connect(server)
+
+        self._socket = conn.makefile('rwb', 4096)
 
         # send login command
         self._send({
             'command': 'login',
-            'name': team_name
+            'name': name,
         })
 
         # handle login response
         resp = self._recv()
-        assert resp['command'] == 'login_confirm'
-        assert resp['name'] == team_name
+        assert resp['command'] == 'loginConfirm'
 
+        self.team_id = resp['teamID']
 
         # wait for the start command
         start = self._recv()
         assert start['command'] == 'start'
 
-        team_id = resp['id']
-        teams = {}
+        team_id = resp['teamID']
+        self.teams = {}
         for team in start['teams']:
-            team = Team(**team)
-            teams[team.id] = team
-        team = teams[team_id]
+            team = Team(team['teamID'], team['name'])
+            self.teams[team.id] = team
+        self.myteam = self.teams[self.team_id]
 
 
-        self.teams = teams
-        self.myteam = team
-        self.map = Map(**start['map'])
         # initialize state info
         self.state = State(0, {})
+
+        map = start['map']
+        self.map = Map(map['width'], map['height'], map['tiles'], map['sectorSize'])
 
 
         # wait for our first turn
@@ -489,26 +476,29 @@ class Game(object):
         '''Send a dictionary as JSON to the server.
         See server/src/schema.ts for valid messages.'''
 
-        message_b = json.dumps(message).encode('utf-8')
-        self._socket.sendall(message_b)
-        self._socket.send(b'\n')
+        message = json.dumps(message)
+        self._socket.write(message.encode('utf-8'))
+        self._socket.write(b'\n')
+        self._socket.flush()
 
     def _recv(self):
         '''Receive a '\n'-delimited JSON message from the server.
         See server/src/schema.ts for valid messages.'''
-        while True:
-            message = self._lineio.readline()
-            if len(message) > 0:
-                break
-            # TODO: this is VERY WRONG
-            # we should write our own newline parsing instead of using the jank
-            # newline thing we're doing now
-            # this library really likes to spin forever
-            time.sleep(.1)
+        # next() reads lines from a file object
+        message = next(self._socket)
 
-        message = message.decode('utf-8')
         result = json.loads(message)
+
+        if "command" not in result:
+            raise BattlecodeError("Unknown result: "+str(result))
+        if result['command'] == 'error':
+            raise BattlecodeError(result["reason"])
+
         return result
+
+    def _finish(self):
+        self._socket.close()
+        self._socket = None
 
     def next_turn(self):
         '''Submit queued actions, and wait for our next turn.'''
@@ -518,17 +508,19 @@ class Game(object):
     def _await_turn(self):
         while True:
             turn = self._recv()
-            assert turn['command'] == 'next_turn'
+
+            assert turn['command'] == 'nextTurn'
             new_state = State(turn['turn'], self.state.entities)
             self.state = new_state
+
+            print(turn)
             if 'winner' in turn:
-                # TODO
                 raise Exception('Game finished')
 
             for dead in turn['dead']:
                 del self.state.entities[dead]
 
-            for sector in turn['changed_sectors']:
+            for sector in turn['changedSectors']:
                 print(sector)
                 self.map.sectors.append(sector)
 
@@ -538,12 +530,16 @@ class Game(object):
                     self.state.entities[id] = Entity(self)
                 self.state.entities[id]._update(entity)
 
-            if turn['next_team'] == self.myteam.id:
+            if 'winner' in turn:
+                self._finish()
+
+            if turn['nextTeam'] == self.myteam.id:
                 return
 
     def _submit_turn(self):
+        print(self.state._action_queue)
         self._send({
-            'command': 'make_turn',
+            'command': 'makeTurn',
             'turn': self.state.turn,
             'actions': self.state._action_queue
         })
@@ -553,3 +549,7 @@ class Game(object):
 
     def get_current_state(self):
         return self.state
+
+class BattlecodeError(Exception):
+    def __init__(self, *args, **kwargs):
+        super(BattlecodeError, self).__init__(self, *args, **kwargs)

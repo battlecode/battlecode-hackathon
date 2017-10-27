@@ -18,8 +18,12 @@ const setupTest = () => {
         renderer.dispose();
     }
     renderer = new Renderer({
+        gameID: 'test',
         command: 'start',
         map: {
+            name: 'test',
+            version: 'battlecode 2017 hackathon map',
+            teamCount: 2,
             width: 10,
             height: 10,
             tiles: [
@@ -34,37 +38,38 @@ const setupTest = () => {
                 ['D', 'D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
                 ['G', 'G', 'D', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
             ],
-            sector_size: 2
+            entities: [
+                { id: 0, type: 'thrower', teamID: 1, location: {x: 0, y: 0}, hp: 10 },
+                { id: 1, type: 'thrower', teamID: 2, location: {x: 4, y: 9}, hp: 10 },
+                { id: 2, type: 'hedge', teamID: 0, location: {x: 4, y: 8}, hp: 10 },
+                { id: 3, type: 'statue', teamID: 1, location: {x: 5, y: 5}, hp: 10 },
+            ],
+            sectorSize: 2
         },
         teams: [
-            {id: 0, name: 'neutral'},
-            {id: 1, name: 'A'},
-            {id: 2, name: 'B'}
+            {teamID: 0, name: 'neutral'},
+            {teamID: 1, name: 'A'},
+            {teamID: 2, name: 'B'}
         ]
     });
     renderer.update({
-        command: "next_turn",
+        gameID: 'test',
+        command: "nextTurn",
         turn: 0,
-        changed: [
-            { id: 0, type: 'thrower', team: 1, location: {x: 0, y: 0}, hp: 10 },
-            { id: 1, type: 'thrower', team: 2, location: {x: 4, y: 9}, hp: 10 },
-            { id: 2, type: 'hedge', team: 0, location: {x: 4, y: 8}, hp: 10 },
-            { id: 3, type: 'statue', team: 1, location: {x: 5, y: 5}, hp: 10 },
-        ],
+        changed: [],
         dead: [],
-        changed_sectors: [],
-
+        changedSectors: [],
         successful: [],
         failed: [],
         reasons: [],
 
-        next_team: 1
+        nextTeam: 1
     });
     document.body.appendChild(renderer.domElement);
 };
 setupTest();
 
-let ws = new ReconnectingWebSocket('ws://localhost:6173/', [], {
+let ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
     maxReconnectInterval: 5000
 });
 
@@ -73,12 +78,16 @@ ws.onclose = (event) => {
 };
 ws.onopen = (event) => {
     console.log('connected');
+    const spectate: schema.SpectateAll = {
+        command: "spectateAll"
+    };
+    ws.send(JSON.stringify(spectate));
 }
 ws.onerror = (err) => {
     console.log('ws error: ', err);
 };
 ws.onmessage = (message) => {
-    let command = JSON.parse(message.data);
+    let command = <schema.OutgoingCommand>JSON.parse(message.data);
     newUpdate();
     // TODO validate?
     if (command.command === 'start') {
@@ -88,7 +97,7 @@ ws.onmessage = (message) => {
 
         renderer = new Renderer(command);
         document.body.appendChild(renderer.domElement);
-    } else if (command.command === 'next_turn') {
+    } else if (command.command === 'nextTurn') {
         if (renderer) {
             renderer.update(command);
         } else {

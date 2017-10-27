@@ -39,7 +39,8 @@ while True:
         else:
             direction_to = \
                 entity.location.direction_to(battlecode.Location(0,0))
-            entity.queue_move(direction_to)
+            if entity.can_move(direction_to):
+                entity.queue_move(direction_to)
 
     print(state.turn)
     if(state.turn > 1000):

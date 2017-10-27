@@ -121,12 +121,7 @@ export interface TeamData {
     /**
      * The name of the team.
      */
-    teamName: string;
-
-    /**
-     * The name of the bot.
-     */
-    botName: string;
+    name: string;
 
     /**
      * The key the player used to login to the gameID.
@@ -140,8 +135,7 @@ export interface TeamData {
  */
 export const NEUTRAL_TEAM: TeamData = {
     teamID: 0,
-    teamName: 'neutral',
-    botName: 'neutral'
+    name: 'neutral',
 }
 
 // All possible actions.
@@ -183,14 +177,9 @@ export interface Login {
 
     /**
      * The name of the bot's team.
-     * Note, the bot is allowed to lie; we'll fix it for it.
+     * Note, we override this field if the bot is playing on the game server.
      */
-    teamName: string;
-
-    /**
-     * The name the player desires to be called.
-     */
-    botName: string;
+    name: string;
     
     /**
      * The gameID the player desires to connect to.

@@ -43,7 +43,7 @@ export class Game {
         this.highestId = 0;
         this.map = map;
         this.teams = teams;
-        this.nextTeam = teams[1].teamID;
+        this.nextTeam = 1;
         this.entities = new Map();
         this.occupied = new LocationMap(map.width, map.height);
         this.sectors = new LocationMap(map.width, map.height);
@@ -55,9 +55,21 @@ export class Game {
         }
     }
 
+    firstTurn(): NextTurn {
+        var turn = this.makeNextTurn();
+        for (var sector of this.sectors.values()) {
+            turn.changedSectors.push(sector);
+        }
+
+        return turn;
+    }
+
     private makeNextTurn(): NextTurn {
         let turn = this.nextTurn;
+        let team = this.nextTeam;
+
         this.nextTurn++;
+
         return {
             command: "nextTurn",
             gameID: this.id,
@@ -68,29 +80,8 @@ export class Game {
             successful: [],
             failed: [],
             reasons: [],
-            nextTeam: this.nextTeam
+            nextTeam: team
         };
-    }
-
-    addInitialEntitiesAndSectors(entities: EntityData[]): NextTurn {
-        if (this.nextTurn !== 0) {
-            throw new ClientError("Can't add entities except on turn 0");
-        }
-
-        var diff = this.makeNextTurn();
-        for (var ent of entities) {
-            this.addOrUpdateEntity(ent); 
-            diff.changed.push(ent);
-        }
-
-        diff.changedSectors = [];
-        for (var sector of this.sectors.values()) {
-            diff.changedSectors.push(sector);
-        }
-
-        diff.nextTeam = this.nextTeam;
-
-        return diff;
     }
 
     /**
@@ -176,6 +167,12 @@ export class Game {
 
         diff.changedSectors = this.getChangedSectors();
         diff.nextTeam = this.nextTeam;
+
+        if (turn > 1000) {
+            // TODO this is wrong
+            diff.winner = 1;
+        }
+
         return diff;
     }
 

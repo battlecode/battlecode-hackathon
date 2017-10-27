@@ -1,7 +1,7 @@
-import { GameStart } from '../../viewer/src/schema';
 import {
     CreateGame,
     EntityData,
+    GameStart,
     GameID,
     GameReplay,
     IncomingCommand,
@@ -19,6 +19,7 @@ import {
     SpectateAll,
     TeamID,
 } from './schema';
+
 import ClientError from './error';
 import { Game } from './game';
 import { Client, ClientID } from './client';
@@ -28,6 +29,7 @@ import * as ws from 'ws';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
 import * as uuid from 'uuid/v4';
+import * as fs from 'fs';
 
 const gzip = <(string) => Promise<Buffer>>promisify(zlib.gzip);
 
@@ -66,6 +68,9 @@ const DEFAULT_MAP: MapData = {
     ]
 };
 
+/**
+ * Represents a game that hasn't started yet.
+ */
 class Lobby {
     /**
      * The ID of this game.
@@ -109,11 +114,9 @@ class Lobby {
                 this.requiredTeams.push({
                     teamID: i+1,
                     // will be overwritten by login since key is not set
-                    teamName: "UNKNOWN",
-                    botName: "UNKNOWN"
+                    name: "UNKNOWN",
                 });
             }
-            
         }
 
         this.playerTeams = []
@@ -123,6 +126,9 @@ class Lobby {
         }
     }
 
+    /**
+     * Handle a login message.
+     */
     login(login: Login, client: Client): GameRunner | undefined {
         for (let [client_, team] of this.playerTeams) {
             if (client_.id == client.id) {
@@ -132,25 +138,14 @@ class Lobby {
 
         for (let i = 0; i < this.requiredTeams.length; i++) {
             const requiredTeam = this.requiredTeams[i];
-            let newTeam: TeamData;
-            if (requiredTeam.key === undefined) {
-                newTeam = {
-                    teamName: login.teamName,
-                    botName: login.botName,
-                    teamID: requiredTeam.teamID
-                };
-            } else {
-                if (login.key !== requiredTeam.key) {
-                    continue;
-                }
-                newTeam = {
-                    // override the bot name from the required requiredTeams (since players are allowed to set it)
-                    botName: login.botName,
-                    // otherwise, take from the game settings (since we're in a locked-down game)
-                    teamName: requiredTeam.teamName,
-                    teamID: requiredTeam.teamID
-                };
+            if (login.key !== requiredTeam.key) {
+                continue;
             }
+            // TODO override on server
+            let newTeam = {
+                name: login.name,
+                teamID: requiredTeam.teamID
+            };
             // assign player to team
             this.playerTeams.push([client, newTeam]);
             this.requiredTeams.splice(i, 1);
@@ -175,7 +170,6 @@ class Lobby {
         }
     }
 
-    // returns whether the game should be cancelled because the client shutdown
     deleteClient(id: ClientID): boolean {
         for (let i = 0; i < this.playerTeams.length; i++) {
             if (this.playerTeams[i][0].id == id) {
@@ -194,7 +188,7 @@ class Lobby {
 
 class GameRunner {
     id: GameID;
-    listeners: Client[];
+    playerClients: Client[];
     players: Map<ClientID, TeamID>;
     game: Game;
     pastTurns: NextTurn[];
@@ -204,11 +198,11 @@ class GameRunner {
 
     constructor(id: GameID, map: MapData, playerTeams: [Client, TeamData][], onEnd: Client[]) {
         this.id = id;
-        this.listeners = [];
+        this.playerClients = [];
         this.players = new Map();
         const teams: TeamData[] = [];
         for (let [client, team] of playerTeams) {
-            this.listeners.push(client);
+            this.playerClients.push(client);
             this.players.set(client.id, team.teamID);
             teams.push(team);
         }
@@ -223,16 +217,19 @@ class GameRunner {
 
     }
 
-    async addSpectator(listener: Client) {
-        if (this.listeners.indexOf(listener) != -1) {
-            throw new Error("client already listening?")
-        }
-        this.listeners.push(listener);
+    async broadcast(command: OutgoingCommand) {
+        // add to our listeners
+        Client.sendToAll(command, this.playerClients);
+        // send to global spectators
+        Client.sendToAll(command, spectators);
+    }
+
+    async addSpectator(spectator: Client) {
         if (this.started) {
             // note: client may start receiving turns before they receive the replay
             // that's fine, they just need to store them somewhere
             const replay = await this.makeReplay()
-            listener.send(replay);
+            spectator.send(replay);
         }
     }
 
@@ -243,8 +240,10 @@ class GameRunner {
             map: this.game.map,
             teams: this.game.teams
         };
-        Client.sendToAll(start, this.listeners);
+        await this.broadcast(start);
         this.started = true;
+        const firstTurn = this.game.firstTurn();
+        await this.broadcast(firstTurn);
     }
 
     async makeTurn(turn: MakeTurn, client: Client) {
@@ -254,7 +253,7 @@ class GameRunner {
         }
         const nextTurn = this.game.makeTurn(teamID, turn.turn, turn.actions);
 
-        Client.sendToAll(nextTurn, this.listeners);
+        await this.broadcast(nextTurn);
 
         this.pastTurns.push(nextTurn);
 
@@ -264,6 +263,17 @@ class GameRunner {
     }
 
     async makeReplay(): Promise<GameReplay> {
+        let gzipped = await this.makeGzippedMatchData();
+        const base64 = gzipped.toString('base64');
+
+        return {
+            command: "gameReplay",
+            matchData: base64,
+            id: this.id
+        }
+    }
+
+    async makeGzippedMatchData(): Promise<Buffer> {
         const soFar: MatchData = {
             version: "battlecode 2017 hackathon match",
             map: this.game.map,
@@ -275,14 +285,7 @@ class GameRunner {
 
         // TODO: do this in another process so we don't block running games?
         const json = JSON.stringify(soFar);
-        const gzipped: Buffer = await gzip(json);
-        const base64 = gzipped.toString('base64');
-
-        return {
-            command: "gameReplay",
-            matchData: base64,
-            id: this.id
-        }
+        return gzip(json);
     }
 
     // returns whether the game should be cancelled because the client shutdown
@@ -292,14 +295,16 @@ class GameRunner {
             return true;
         }
         for (let i = 0; i < this.onEnd.length; i++) {
-            if (this.onEnd[i].id == id) {
+            if (this.onEnd[i].id === id) {
                 this.onEnd.splice(i, 1);
+                break;
             }
         }
         return false;
     }
 }
 
+// TODO: this is fairly jank?
 const handleCommand = async (command: IncomingCommand, client: Client) => {
     try {
         switch (command.command) {
@@ -341,10 +346,47 @@ const handleCommand = async (command: IncomingCommand, client: Client) => {
                 command: "error",
                 reason: "internal server error: "+JSON.stringify(e)
             });
-            console.error("internal server error:",JSON.stringify(e));
+            console.error("internal server error:", JSON.stringify(e));
         }
     }
 }
+
+const handleClose = async (client: Client) => {
+    try {
+        for (let game of games.values()) {
+            let broken = game.deleteClient(client.id);
+            if (broken) {
+                console.log("ending game "+game.id);
+                games.delete(game.id);
+                if (game.id === pickupLobbyID) {
+                    pickupLobbyID = undefined;
+                }
+            }
+        }
+    } catch (e) {
+        if (e instanceof ClientError) {
+            // their fault
+            client.send({
+                command: "error",
+                reason: e.message
+            });
+        } else if (e instanceof Error) {
+            // our fault
+            client.send({
+                command: "error",
+                reason: "internal server error: "+e.message
+            });
+            console.error("internal server error:", e.stack);
+        } else {
+            // still our fault
+            client.send({
+                command: "error",
+                reason: "internal server error: "+JSON.stringify(e)
+            });
+            console.error("internal server error:", JSON.stringify(e));
+        }
+    }
+};
 
 const games: Map<GameID, Lobby | GameRunner> = new Map();
 const playing: Map<ClientID, GameID> = new Map();
@@ -384,9 +426,7 @@ const handleLogin = async (login: Login, client: Client) => {
     if (runner) {
         // Lobby has converted into GameRunner
         games.set(runner.id, runner);
-        for (let spectator of spectators) {
-            runner.addSpectator(spectator);
-        }
+        runner.start();
         if (runner.id === pickupLobbyID) {
             pickupLobbyID = undefined;
         }
@@ -406,6 +446,12 @@ const handleMakeTurn = async (makeTurn: MakeTurn, client: Client) => {
         throw new ClientError("game hasn't started yet")
     }
     await game.makeTurn(makeTurn, client);
+    if (game.winner) {
+        let time = Date.now();
+        let replay = await game.makeGzippedMatchData();
+        console.log("save time: "+(Date.now() - time) + 'ms');
+        fs.writeFileSync(`match-${gameID}.bch18`, replay);
+    }
 }
 
 const handleSpectateAll = async (spectateAll: SpectateAll, client: Client) => {
@@ -425,7 +471,9 @@ const handleCreateGame = async (createGame: CreateGame, client: Client) => {
 console.log('tcp listening on :6147');
 let tcpServer = new net.Server((socket) => {
     const client = Client.fromTCP(socket);
+    console.log(client.id + " |");
     client.onCommand(handleCommand);
+    client.onClose(handleClose);
 });
 tcpServer.listen(6147);
 
@@ -435,8 +483,8 @@ let wsServer = new ws.Server({ server: httpServer });
 wsServer.on('connection', (socket) => {
     const client = Client.fromWeb(socket);
     client.onCommand(handleCommand);
+    client.onClose(handleClose);
 });
 httpServer.listen(6148);
 
 console.log('ready.');
-

@@ -47,18 +47,18 @@ class Entity(object):
         else:
             self.location = None
 
-        if 'cooldown_end' in data:
-            self.cooldown_end = data['cooldown_end']
+        if 'cooldownEnd' in data:
+            self.cooldown_end = data['cooldownEnd']
         else: 
             self.cooldown_end = self._game.turn
 
-        if 'holding_end' in data:
-            self.holding_end = data['holding_end']
+        if 'holdingEnd' in data:
+            self.holding_end = data['holdingEnd']
         else:
             self.holding_end = self._game.turn
 
-        if 'held_by' in data:
-            self.held_by = self._game.entities[data['held_by']]
+        if 'heldBy' in data:
+            self.held_by = self._game.entities[data['heldBy']]
         else:
             self.held_by = None
 
@@ -147,16 +147,16 @@ class Team(object):
 class Game(object):
     '''A game that's currently running.'''
 
-    def __init__(self, team_name, server=('localhost', 6172)):
+    def __init__(self, name, server=('localhost', 6147)):
         '''Connect to the server and wait for the first turn.'''
 
-        assert isinstance(team_name, str) \
-               and len(team_name) > 5 and len(team_name) < 100, \
-               'invalid team name: '+unicode(team_name)
+        assert isinstance(name, str) \
+               and len(name) > 5 and len(name) < 100, \
+               'invalid team name: '+unicode(name)
 
         # setup connection
         conn = socket.socket()
-        conn.settimeout(5)
+        # conn.settimeout(5)
         conn.connect(server)
 
         self._socket = conn.makefile('rwb', 4096)
@@ -164,15 +164,14 @@ class Game(object):
         # send login command
         self._send({
             'command': 'login',
-            'name': team_name
+            'name': name,
         })
 
         # handle login response
         resp = self._recv()
-        assert resp['command'] == 'login_confirm'
-        assert resp['name'] == team_name
+        assert resp['command'] == 'loginConfirm'
 
-        team_id = resp['id']
+        team_id = resp['teamID']
 
         # wait for the start command
         start = self._recv()
@@ -180,12 +179,13 @@ class Game(object):
 
         self.teams = {}
         for team in start['teams']:
-            team = Team(**team)
+            team = Team(team['teamID'], team['name'])
             self.teams[team.id] = team
 
         self.team = self.teams[team_id]
 
-        self.map = Map(**start['map'])
+        map = start['map']
+        self.map = Map(map['width'], map['height'], map['tiles'], map['sectorSize'])
 
         # initialize other state
         self.turn = 0
@@ -214,7 +214,17 @@ class Game(object):
         message = next(self._socket)
 
         result = json.loads(message)
+
+        if "command" not in result:
+            raise BattlecodeError("Unknown result: "+str(result))
+        if result['command'] == 'error':
+            raise BattlecodeError(result["reason"])
+
         return result
+
+    def _finish(self):
+        self._socket.close()
+        self._socket = None
 
     def next_turn(self):
         '''Submit queued actions, and wait for our next turn.'''
@@ -224,7 +234,7 @@ class Game(object):
     def _await_turn(self):
         while True:
             turn = self._recv()
-            assert turn['command'] == 'next_turn'
+            assert turn['command'] == 'nextTurn'
             self.turn = turn['turn']
             if 'winner' in turn:
                 # TODO
@@ -239,14 +249,15 @@ class Game(object):
                     self.entities[id] = Entity(self)
                 self.entities[id]._update(entity)
 
-            if turn['next_team'] == self.team.id:
+            if 'winner' in turn:
+                self._finish()
+
+            if turn['nextTeam'] == self.team.id:
                 return
-
-
 
     def _submit_turn(self):
         self._send({
-            'command': 'make_turn',
+            'command': 'makeTurn',
             'turn': self.turn,
             'actions': self._action_queue
         })
@@ -255,3 +266,6 @@ class Game(object):
     def _queue(self, action):
         self._action_queue.append(action)
 
+class BattlecodeError(Exception):
+    def __init__(self, *args, **kwargs):
+        super(BattlecodeError, self).__init__(self, *args, **kwargs)

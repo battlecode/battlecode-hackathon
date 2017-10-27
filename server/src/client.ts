@@ -60,6 +60,7 @@ export class Client {
     static sendToAll(command: OutgoingCommand, clients: Client[]) {
         const serialized = JSON.stringify(command);
         for (let client of clients) {
+            // console.log(client.id + " < " + serialized);
             client.sendString(serialized);
         }
     }
@@ -76,6 +77,11 @@ export class Client {
             } else {
                 console.log("???")
             }
+        }
+        if (this.socket.type == "tcp") {
+            this.socket.tcp.on('error', errorCb);
+        } else {
+            this.socket.web.on('error', errorCb);
         }
     }
 
@@ -94,6 +100,7 @@ export class Client {
                 });
                 return;
             }
+            //console.log(this.id + " > "+JSON.stringify(command));
             callback(command, this);
         };
         if (this.socket.type === 'tcp') {
@@ -105,14 +112,15 @@ export class Client {
 
     onClose(callback: (client: Client) => void) {
         if (this.socket.type === 'tcp') {
-            this.socket.byline.on('close', () => callback(this));
+            // note: add callback to tcp and not byline
+            this.socket.tcp.on('close', () => callback(this));
         } else {
             this.socket.web.on('close', () => callback(this));
         }
     }
 
     send(command: OutgoingCommand) {
-        //console.log(this.id + " < " + JSON.stringify(command));
+        // console.log(this.id + " < " + JSON.stringify(command));
         this.sendString(JSON.stringify(command));
     }
 

@@ -21,11 +21,6 @@ while True:
         near_entites = entity.entities_within_distance_squared(2)
         near_entites = list(filter(lambda x: x.can_be_picked, near_entites))
 
-        direction_to = \
-            entity.location.direction_to(battlecode.Location(1,0))
-        if entity.can_move(direction_to):
-                entity.queue_move(direction_to)
-        continue
         if len(near_entites)>0:
             index = random.randrange(0, len(near_entites))
             other_entity = near_entites[index]

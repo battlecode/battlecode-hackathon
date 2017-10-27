@@ -472,7 +472,6 @@ class Game(object):
             entity_new._update(entity)
             entities[entity_new.id] =  entity_new
 
-        print(entities)
         self.state = State(0, entities) 
 
 
@@ -520,8 +519,6 @@ class Game(object):
             turn = self._recv()
 
             assert turn['command'] == 'nextTurn'
-            print(turn)
-            print(self.state.entities)
 
             if 'winner' in turn:
                 raise Exception('Game finished')

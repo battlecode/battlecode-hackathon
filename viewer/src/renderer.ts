@@ -24,6 +24,8 @@ type TeamColors = number[];
  */
 export default class Renderer {
     // we store references to things we'll need to update
+    gameID: schema.GameID;
+
     scene: Scene;
     perspective: PerspectiveCamera;
     isometric: OrthographicCamera;
@@ -36,6 +38,7 @@ export default class Renderer {
     map: schema.MapData;
 
     constructor(start: schema.GameStart) {
+        this.gameID = start.gameID;
         this.teamColors = makeColors(start.teams);
         this.map = start.map;
 
@@ -59,6 +62,10 @@ export default class Renderer {
 
         // add the robots to the world
         this.entities = new Entities(this.scene, this.teamColors);
+
+        for (let entity of start.map.entities) {
+            this.entities.addOrUpdateEntity(entity);
+        }
 
         const ambient = new AmbientLight("#fff", .4);
         this.scene.add(ambient);
@@ -94,6 +101,9 @@ export default class Renderer {
     }
 
     update(update: schema.NextTurn) {
+        if (update.gameID !== this.gameID) {
+            return;
+        }
         for (const changed of update.changed) {
             this.entities.addOrUpdateEntity(changed);
         }
@@ -149,7 +159,7 @@ class Entities {
             let height = data.type == 'thrower'? 
                 1 : (data.type == 'hedge'? 1.2 : 2);
             const geometry = new BoxGeometry(1,1,height, 1,1,1);
-            const material = this.teamMaterials[data.team];
+            const material = this.teamMaterials[data.teamID];
             mesh = new Mesh(geometry, material);
             mesh.castShadow = true;
             mesh.userData.entityId = data.id;
@@ -158,7 +168,7 @@ class Entities {
             this.entities[data.id] = mesh;
             this.scene.add(mesh);
         }
-        if (data.held_by !== undefined) {
+        if (data.heldBy !== undefined) {
             // TODO add holder height to held height
             // needs actual entity data structure
             mesh.position.z = 1.6;

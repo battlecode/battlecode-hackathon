@@ -3,6 +3,7 @@ import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
 import { Sector } from './zone';
 import LocationMap from './locationmap';
 import ClientError from './error';
+import deepcopy from 'deepcopy';
 
 function distance(a: Location, b: Location): number {
     var dx = a.x - b.x;
@@ -52,6 +53,10 @@ export class Game {
             for(var y = 0; y < this.map.height; y += this.map.sectorSize) {
                 this.sectors.set(x, y, new Sector({y: y, x: x}));
             }
+        }
+
+        for (var e of map.entities) {
+            this.addOrUpdateEntity(e);
         }
     }
 
@@ -189,27 +194,32 @@ export class Game {
     /**
      * Returns EntityData[] of throwers to be spawned in controlled sectors
      */
-    getNewThrowers(): EntityData[] {
-        var throwers: EntityData[] = []
+    *getNewThrowers(): IterableIterator<EntityData> {
         for (var sector of this.sectors.values()) {
-            var statue = this.entities.get(sector.getSpawningStatueID())
+            var statueID = sector.getSpawningStatueID();
+            if (statueID === -1) continue;
+
             // if statue exists in game  
-            if (statue) {
-                // TODO full spawn logic
-                let next = { x: statue.location.x + 1, y: statue.location.y };
-                if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
-                    var newThrower: EntityData = {
-                        id: this.highestId + 1,
-                        type: "thrower",
-                        location: next,
-                        teamID: statue.teamID,
-                        hp: 10
-                    };
-                    throwers.push(newThrower);
-                }
+            let statue = this.entities.get(statueID);
+
+            if (!statue) {
+                throw new Error("no such statue? "+statueID);
+            }
+
+            // TODO full spawn logic
+            let next = { x: statue.location.x + 1, y: statue.location.y };
+            if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
+                var newThrower: EntityData = {
+                    id: this.highestId + 1,
+                    type: "thrower",
+                    location: next,
+                    teamID: statue.teamID,
+                    hp: 10
+                };
+                console.log(`spawning ${JSON.stringify(newThrower)} from ${JSON.stringify(statue)}`);
+                yield newThrower;
             }
         }
-        return throwers; 
     }
 
     doAction(team: TeamID, diff: NextTurn, action: Action) {

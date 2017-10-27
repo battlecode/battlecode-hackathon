@@ -41,6 +41,7 @@ export class Sector {
     }
 
     deleteStatue(statue: EntityData) {
+        
         var team = this.getTeam(statue.teamID); 
         var index = team.indexOf(statue.id);
         if (index < 0) {
@@ -73,6 +74,8 @@ export class Sector {
     updateControllingTeam() {
         var newControllingTeam = this.getControllingTeamID()
         if (this.controllingTeam != newControllingTeam) {
+            console.log('sector changed: '+JSON.stringify(this.topLeft)+' '+
+                this.controllingTeam+' -> '+newControllingTeam);
             this.controllingTeam = newControllingTeam;
             this.hasChanged = true;
         }
@@ -90,9 +93,9 @@ export class Sector {
     }
 
     /**
-    * returns id of oldest statue from team, or -1 if no statue exists
-    * oldest statue is statue with lowest id 
-    */
+     * returns id of oldest statue from team, or -1 if no statue exists
+     * oldest statue is statue with lowest id 
+     */
     getOldestStatueID(team: TeamID): EntityID {
         var oldest: EntityID = -1; 
         if (!this.teams.has(team)) {

@@ -9,6 +9,7 @@ rounds = 0
 start = time.clock()
 
 while True:
+    time.sleep(.01)
     game.next_turn()
 
     rounds += 1

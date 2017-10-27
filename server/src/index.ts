@@ -482,6 +482,7 @@ let httpServer = new http.Server();
 let wsServer = new ws.Server({ server: httpServer });
 wsServer.on('connection', (socket) => {
     const client = Client.fromWeb(socket);
+    console.log(client.id + " |");
     client.onCommand(handleCommand);
     client.onClose(handleClose);
 });

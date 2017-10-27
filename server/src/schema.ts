@@ -196,15 +196,6 @@ export interface Login {
 }
 
 /**
- * Requests the server send all messages for all gameIDs.
- * Used by the viewer.
- */
-export interface SpectateAll {
-    command: "spectateAll";
-    gameID: GameID;
-}
-
-/**
  * Tells server to perform a list of action.
  */
 export interface MakeTurn {
@@ -368,6 +359,14 @@ export interface GameReplay {
      * A base64-encoded gzipped MatchData.
      */
     matchData: string;
+}
+
+/**
+ * Requests the server send all messages for all gameIDs.
+ * Used by the viewer.
+ */
+export interface SpectateAll {
+    command: "spectateAll";
 }
 
 /**

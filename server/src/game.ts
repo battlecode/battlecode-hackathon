@@ -56,7 +56,8 @@ export class Game {
         }
 
         for (var e of map.entities) {
-            this.addOrUpdateEntity(e);
+            // don't mutate the map
+            this.addOrUpdateEntity(deepcopy(e));
         }
     }
 

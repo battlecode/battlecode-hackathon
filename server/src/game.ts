@@ -176,6 +176,29 @@ export class Game {
         return diff;
     }
 
+    getDeadEntities(): EntityData[] {
+        var dead: EntityData[] = [];
+        for (var entity of this.entities.values()) {
+            if (entity.hp <= 0) {
+                this.deleteEntity(entity.id);
+                dead.push(entity);
+            }
+        }
+        return dead;
+    }
+
+    dealFatigueDamage(): EntityData[] {
+        var damaged_entities: EntityData[] = [];
+        for (var entity of this.entities.values()) {
+            if (entity.holding_end && entity.holding_end < this.nextTurn && entity.holding) {
+                entity.hp -= 1;
+                
+                damaged_entities.push(entity)
+            }
+        }
+        return damaged_entities;
+    }
+
     getChangedSectors(): SectorData[] {
         var changedSectors: SectorData[] = []; 
         for (var sector of this.sectors.values()) {
@@ -407,6 +430,12 @@ export class Game {
             if (action.action === "move") {
                 newEntity = {... entity};
                 newEntity.location = action.loc;
+                // location of held object moves if the holding entity moves
+                if (newEntity.holding) {
+                    held = this.entities.get(newEntity.holding) as EntityData;
+                    held.location = newEntity.location;
+                    diff.changed.push(held);
+                }
             } else {
                 newEntity = {
                     id: this.highestId + 1,

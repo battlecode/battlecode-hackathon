@@ -21,17 +21,17 @@ def direction_rotate_degrees_clockwise(direction, degrees):
 
     return Direction((direction.value+degrees//45%8))
 
-def direction_to_delta(directio):
+def direction_to_delta(direction):
     ''' Take a direction and return a delta x and delta y to go in that
     direction '''
     if direction == Direction.NORTH:
         delx = 0
         dely = 1
     elif direction == Direction.NORTH_EAST:
-        delx = 1 
-        dely = 1 
+        delx = 1
+        dely = 1
     elif direction == Direction.NORTH_WEST:
-        delx = -1 
+        delx = -1
         dely = 1
     elif direction == Direction.SOUTH:
         delx = 0
@@ -54,7 +54,7 @@ def direction_to_delta(directio):
         if __debug__:
             assert False, "Invalid Direction Given"
     return (delx, dely)
-    
+
 
 class Direction(Enum):
     ''' This is an enum for direction '''
@@ -67,13 +67,13 @@ class Direction(Enum):
     WEST = 6
     NORTH_WEST = 7
 
-        
+
 
 class Entity(object):
     '''
     An entity in the world: a Thrower, Hedge, or Statue.
 
-    Do not modify the properties of this object; it won't do anything.
+    Do not modify the properties of this object; it won't do anything
     Instead, call entity.queue_move() and other methods to tell the game to do something
     next turn.
     '''
@@ -110,7 +110,7 @@ class Entity(object):
 
         if 'cooldown_end' in data:
             self.cooldown_end = data['cooldown_end']
-        else: 
+        else:
             self.cooldown_end = 0
 
         if 'holding_end' in data:
@@ -163,7 +163,12 @@ class Entity(object):
         ''' Returns true if the entitiy can be picked up. Otherwise returns
         false'''
 
+        # Possible change this to
         return self.is_robot and not self.is_holding
+
+    @property
+    def can_throw(self):
+        return self.is_holding
 
     def can_move(self, direction):
         ''' Returns true if the robot can move in a given direction. False
@@ -242,7 +247,7 @@ class Entity(object):
             'id': self.id
         })
 
-    def queue_throw(self, direction):
+    def queue_throw(self, location):
         '''Queues a move, so that this object will throw held object one square
         in given direction in the next turn.'''
         if __debug__:
@@ -341,7 +346,11 @@ class Location(object):
         delx = delx*distance
         dely = dely*distance
         return Location(self.x+delx, self.y+dely)
-    
+
+class Sector(object):
+    def __init__(self, top_left):
+        pass
+
 
 class Map(object):
     '''A game map.'''
@@ -350,7 +359,8 @@ class Map(object):
         self.width = width
         self.tiles = tiles
         self.sector_size = sector_size
-    
+        self.sectors = []
+
     def tile_at(self, location):
         '''Get the tile at a location.'''
         return self.tiles[location.y][location.x]
@@ -360,7 +370,7 @@ class Map(object):
             assert isinstance(location, Location), "Must pass a location"
         x = location.x
         y = location.y
-        return ((y>0 and y < height) and (x>0 and x < width))
+        return ((y>0 and y < self.height) and (x>0 and x < self.width))
 
 
 class Team(object):
@@ -369,7 +379,7 @@ class Team(object):
     def __init__(self, id, name):
         self.id = id
         self.name = name
-    
+
     def __eq__(self, other):
         return isinstance(other, Team) and other.id == self.id
 
@@ -408,7 +418,7 @@ class State(object):
     def get_turn(self):
         return self.turn
 
-    @property 
+    @property
     def turn_next_spawn(self):
         return ((self.turn-1)//10+1)*10
 
@@ -517,6 +527,10 @@ class Game(object):
 
             for dead in turn['dead']:
                 del self.state.entities[dead]
+
+            for sector in turn['changed_sectors']:
+                print(sector)
+                self.map.sectors.append(sector)
 
             for entity in turn['changed']:
                 id = entity['id']

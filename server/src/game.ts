@@ -227,14 +227,22 @@ export class Game {
         }
 
         if (action.action === "disintegrate") {
-            this.deleteEntity(action.id);
+            this.deleteEntity(entity.id);
+
+            if (entity.holding) {
+                held = this.entities.get(entity.holding) as EntityData;
+                held.held_by = false;
+                held.location = entity.location;
+                this.addOrUpdateEntity(held);
+                diff.changed.push(held);
+            }
 
             diff.dead.push(entity.id);
             diff.successful.push(action);
             return;
         }
 
-        // TODO: Implement fatigue(?) meter to decrease holding robot hp once it holds another robot for > 10 turns
+        // TODO: deduct hp from entity if it holds an entity for too long
         if (action.action === "pickup") {
             var pickup = this.entities.get(action.pickupid);
             if(!pickup) {
@@ -331,7 +339,7 @@ export class Game {
             }
             
             // if target_loc is out of bounds, then target does not exist
-            // placeholder damages to different structures
+            // currently has placeholder damages to different structures
             var target_id = this.occupied.get(target_loc.x, target_loc.y);
             var target;
             if (target_id) {
@@ -340,9 +348,9 @@ export class Game {
             if (target) {
                 // Target may or may not be destroyed
                 if (target.type === "thrower")
-                    target.hp -= 99999
-                if (target.type === "statue")
-                    target.hp -= 99999
+                    target.hp -= 99999;
+                else if (target.type === "statue")
+                    target.hp -= 99999;
             }
 
             const final: Location = {
@@ -355,8 +363,15 @@ export class Game {
             entity.holding = undefined;
 
             diff.successful.push(action)
+            // if target exists and hp < 0, it dies and is deleted from game
             if (target) {
-                diff.changed.push(target)
+                if (target.hp <= 0) {
+                    this.deleteEntity(target.id);
+                    diff.dead.push(target);  
+                }
+                else {
+                    diff.changed.push(target);
+                }
             }
             diff.changed.push(entity, held)
         }

@@ -15,11 +15,12 @@ while True:
 
 
     for entity in state.entities.values():
-        if entity.team == game.myteam or not entity.can_act:
+        if entity.team != game.myteam or not entity.can_act:
             continue
         my_location = entity.location
         near_entites = entity.entities_within_distance_squared(2)
         near_entites = list(filter(lambda x: x.can_be_picked, near_entites))
+
         if len(near_entites)>0:
             index = random.randrange(0, len(near_entites))
             other_entity = near_entites[index]

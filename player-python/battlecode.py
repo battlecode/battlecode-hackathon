@@ -176,7 +176,7 @@ class Entity(object):
         if not self.can_act:
             return False
 
-        location = self.location.adjaent_location_in_direction(direction)
+        location = self.location.adjacent_location_in_direction(direction)
         entity = self._game.state.entity_at_location(location)
         on_map = self._game.map.location_on_map(location)
 
@@ -210,13 +210,12 @@ class Entity(object):
     def queue_move(self, direction):
         '''Queues a move, so that this object will move one square in given
         direction in the next turn.'''
-        location = self.location.adjaent_location_in_direction(direction)
+        location = self.location.adjacent_location_in_direction(direction)
 
         if __debug__:
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.can_move(direction), "Invalid move cannot move in given direction"
 
-        print("Sending move queue")
         self._game._queue({
             'action': 'move',
             'id': self.id,
@@ -253,7 +252,7 @@ class Entity(object):
         if __debug__:
             assert self.holding != None, "Not Holding anything"
 
-        location = self.location.adjaent_location_in_direction(direction)
+        location = self.location.adjacent_location_in_direction(direction)
         self._game._queue({
             'action': 'throw',
             'id': self.id ,
@@ -266,7 +265,7 @@ class Entity(object):
     def queue_pickup(self, entity):
         if __debug__:
             assert self.can_pickup(entity), "Invalid Pickup Command"
-        print("Trying to pickup")
+
         self._game._queue({
             'action': 'pickup',
             'id': self.id ,
@@ -333,7 +332,7 @@ class Location(object):
         else:
             return Direction.SOUTH
 
-    def adjaent_location_in_direction(self, direction):
+    def adjacent_location_in_direction(self, direction):
         (delx, dely) = direction_to_delta(direction)
         return Location(self.x+delx, self.y+dely)
 
@@ -457,14 +456,23 @@ class Game(object):
         for team in start['teams']:
             team = Team(team['teamID'], team['name'])
             self.teams[team.id] = team
+
         self.myteam = self.teams[self.team_id]
 
 
         # initialize state info
-        self.state = State(0, {})
 
         map = start['map']
         self.map = Map(map['width'], map['height'], map['tiles'], map['sectorSize'])
+
+        entities = {}
+        self.state = State(0,{})
+        for entity in map['entities']:
+            entity_new = Entity(self)
+            entity_new._update(entity)
+            entities[entity_new.id] =  entity_new
+
+        self.state = State(0, entities) 
 
 
         # wait for our first turn
@@ -491,6 +499,7 @@ class Game(object):
 
         if "command" not in result:
             raise BattlecodeError("Unknown result: "+str(result))
+
         if result['command'] == 'error':
             raise BattlecodeError(result["reason"])
 
@@ -510,10 +519,7 @@ class Game(object):
             turn = self._recv()
 
             assert turn['command'] == 'nextTurn'
-            new_state = State(turn['turn'], self.state.entities)
-            self.state = new_state
 
-            print(turn)
             if 'winner' in turn:
                 raise Exception('Game finished')
 
@@ -521,7 +527,6 @@ class Game(object):
                 del self.state.entities[dead]
 
             for sector in turn['changedSectors']:
-                print(sector)
                 self.map.sectors.append(sector)
 
             for entity in turn['changed']:
@@ -530,6 +535,9 @@ class Game(object):
                     self.state.entities[id] = Entity(self)
                 self.state.entities[id]._update(entity)
 
+            new_state = State(turn['turn'], self.state.entities)
+            self.state = new_state
+
             if 'winner' in turn:
                 self._finish()
 
@@ -537,7 +545,6 @@ class Game(object):
                 return
 
     def _submit_turn(self):
-        print(self.state._action_queue)
         self._send({
             'command': 'makeTurn',
             'turn': self.state.turn,

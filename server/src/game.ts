@@ -106,7 +106,11 @@ export class Game {
     addOrUpdateEntity(entity: EntityData) {
         let current = this.occupied.get(entity.location.x, entity.location.y);
         if (current !== undefined && current !== entity.id) {
-            throw new ClientError("location occupied: "+JSON.stringify(entity)+current);
+            let currentEntity = <EntityData> this.entities[current];
+
+            if (currentEntity.heldBy != entity.id && currentEntity.holding != entity.id) {
+                throw new Error("location occupied: "+JSON.stringify(entity)+current);
+            }
         }
 
         if (this.entities.has(entity.id)) {
@@ -139,7 +143,9 @@ export class Game {
         }
 
         this.entities.delete(id);
-        this.occupied.delete(entity.location.x, entity.location.y);
+        if (entity.heldBy === undefined) {
+            this.occupied.delete(entity.location.x, entity.location.y);
+        }
     }
 
     makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
@@ -171,7 +177,6 @@ export class Game {
             }
         }
 
-
         this.dealFatigueDamage(diff);
         diff.changedSectors = this.getChangedSectors();
         diff.nextTeam = this.nextTeam;
@@ -185,16 +190,29 @@ export class Game {
 
     dealFatigueDamage(diff: NextTurn) {
         for (var entity of this.entities.values()) {
-            if (entity.holdingEnd && entity.holdingEnd < this.nextTurn && entity.holding) {
-                entity.hp -= 1;
-                if (entity.hp > 0) {
-                    diff.changed.push(entity);
-                }
-                else {
-                    this.deleteEntity(entity.id);
-                    diff.dead.push(entity.id);
-                }
+            if (entity.holdingEnd && entity.holdingEnd < this.nextTurn) {
+                this.dealDamage(entity.id, 1, diff);
             }
+        }
+    }
+
+    dealDamage(id: EntityID, damage: number, diff: NextTurn) {
+        let entity = this.entities.get(id);
+        if (entity === undefined) {
+            throw new Error("entity undefined?? "+id);
+        }
+        entity.hp -= damage;
+        if (entity.hp > 0) {
+            diff.changed.push(entity);
+        } else {
+            if (entity.holding) {
+                let held = this.entities.get(entity.holding) as EntityData;
+                held.heldBy = undefined;
+                this.addOrUpdateEntity(held);
+                diff.changed.push(held);
+            }
+            this.deleteEntity(entity.id);
+            diff.dead.push(entity.id);
         }
     }
 
@@ -233,7 +251,6 @@ export class Game {
                     teamID: statue.teamID,
                     hp: 10
                 };
-                console.log(`spawning ${JSON.stringify(newThrower)} from ${JSON.stringify(statue)}`);
                 yield newThrower;
             }
         }
@@ -254,18 +271,7 @@ export class Game {
         }
 
         if (action.action === "disintegrate") {
-            this.deleteEntity(entity.id);
-
-            if (entity.holding) {
-                held = this.entities.get(entity.holding) as EntityData;
-                held.heldBy = undefined;
-                held.location = entity.location;
-                this.addOrUpdateEntity(held);
-                diff.changed.push(held);
-            }
-
-            diff.dead.push(entity.id);
-            diff.successful.push(action);
+            this.dealDamage(entity.id, entity.hp, diff);
             return;
         }
 
@@ -381,10 +387,11 @@ export class Game {
             }
             if (target) {
                 // Target may or may not be destroyed
-                if (target.type === "thrower")
-                    target.hp -= 99999;
-                else if (target.type === "statue")
-                    target.hp -= 99999;
+                if (target.type === "thrower") {
+                    this.dealDamage(target.id, 4, diff);
+                } else if (target.type === "statue") {
+                    this.dealDamage(target.id, 4, diff);
+                }
             }
 
             const final: Location = {
@@ -395,18 +402,9 @@ export class Game {
             held.heldBy = undefined;
             this.addOrUpdateEntity(held);
             entity.holding = undefined;
+            entity.holdingEnd = undefined;
 
             diff.successful.push(action)
-            // if target exists and hp < 0, it dies and is deleted from game
-            if (target) {
-                if (target.hp <= 0) {
-                    this.deleteEntity(target.id);
-                    diff.dead.push(target);  
-                }
-                else {
-                    diff.changed.push(target);
-                }
-            }
             diff.changed.push(entity, held);
         }
 

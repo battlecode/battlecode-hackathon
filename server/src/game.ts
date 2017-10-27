@@ -306,6 +306,7 @@ export class Game {
             }
 
             entity.holding = pickup.id;
+            entity.holding_end = this.nextTurn + 10;
             pickup.held_by = true;
             // Picked-up entity occupies the same location as its holder
             pickup.location = entity.location;

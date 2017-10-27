@@ -46,6 +46,7 @@ export class Game {
         this.teams = teams;
         this.nextTeam = 1;
         this.entities = new Map();
+        // occupied stores location (x, y) as keys and EntityID as values
         this.occupied = new LocationMap(map.width, map.height);
         this.sectors = new LocationMap(map.width, map.height);
 
@@ -170,6 +171,8 @@ export class Game {
             }
         }
 
+
+        this.dealFatigueDamage(diff);
         diff.changedSectors = this.getChangedSectors();
         diff.nextTeam = this.nextTeam;
 
@@ -177,8 +180,22 @@ export class Game {
             // TODO this is wrong
             diff.winner = 1;
         }
-
         return diff;
+    }
+
+    dealFatigueDamage(diff: NextTurn) {
+        for (var entity of this.entities.values()) {
+            if (entity.holdingEnd && entity.holdingEnd < this.nextTurn && entity.holding) {
+                entity.hp -= 1;
+                if (entity.hp > 0) {
+                    diff.changed.push(entity);
+                }
+                else {
+                    this.deleteEntity(entity.id);
+                    diff.dead.push(entity.id);
+                }
+            }
+        }
     }
 
     getChangedSectors(): SectorData[] {
@@ -236,11 +253,78 @@ export class Game {
             diff.reasons.push("wrong team: "+entity.teamID);
         }
 
-        if (action.action == "disintegrate") {
-            this.deleteEntity(action.id);
+        if (action.action === "disintegrate") {
+            this.deleteEntity(entity.id);
+
+            if (entity.holding) {
+                held = this.entities.get(entity.holding) as EntityData;
+                held.heldBy = undefined;
+                held.location = entity.location;
+                this.addOrUpdateEntity(held);
+                diff.changed.push(held);
+            }
 
             diff.dead.push(entity.id);
             diff.successful.push(action);
+            return;
+        }
+
+        // TODO: deduct hp from entity if it holds an entity for too long
+        if (action.action === "pickup") {
+            var pickup = this.entities.get(action.pickupid);
+            if(!pickup) {
+                diff.failed.push(action);
+                diff.reasons.push("No such entity for pickup: "+action.pickupid);
+                return;
+            }
+
+            if(pickup.type !== "thrower") {
+                diff.failed.push(action);
+                diff.reasons.push("Entity can only pick up Thrower, not: " + pickup.type);
+                return;
+            }
+
+            if(distance(entity.location, pickup.location) > 2) {
+                diff.failed.push(action);
+                diff.reasons.push("Pickup distance too far: Entity: " + JSON.stringify(entity.location)
+                    + " Pickup: " + JSON.stringify(pickup.location));
+                return;
+            }
+
+            if(entity.heldBy) {
+                diff.failed.push(action);
+                diff.reasons.push("Held Entity cannot hold another entity: " + entity.id);
+                return;
+            }
+
+            if(entity.holding) {
+                diff.failed.push(action);
+                diff.reasons.push("Entity already holding another entity: " + entity.id 
+                    + " holding: " + entity.holding);
+                return;
+            }
+
+            if(pickup.heldBy) {
+                diff.failed.push(action);
+                diff.reasons.push("Pickup target already held by another entity: " + pickup.id);
+                return;
+            }
+
+            if(pickup.holding) {
+                diff.failed.push(action);
+                diff.reasons.push("Pickup target holding another entity: " + pickup.id);
+                return;
+            }
+
+            entity.holding = pickup.id;
+            entity.holdingEnd = this.nextTurn + 10;
+            pickup.heldBy = entity.id;
+            // Picked-up entity occupies the same location as its holder
+            pickup.location = entity.location;
+            this.occupied.delete(pickup.location.x, pickup.location.y);
+            
+            diff.successful.push(action);
+            diff.changed.push(entity, pickup);
             return;
         }
 
@@ -248,6 +332,76 @@ export class Game {
             diff.failed.push(action);
             diff.reasons.push("Entity still on cool down: " + entity.id);
             return;
+        }
+
+        // TODO: take care of deaths (of hit target and/or thrown entity)
+        if (action.action === "throw") {
+            if (!entity.holding) {
+                diff.failed.push(action);
+                diff.reasons.push("Entity is not holding anything to throw: " + entity.id);
+                return;
+            }
+
+            var held = this.entities.get(entity.holding)
+            if (!held) {
+                diff.failed.push(action);
+                diff.reasons.push("Held entity does not exist: " + entity.holding);
+                return;
+            }
+
+            const initial = entity.location;
+            var target_loc: Location = {
+                x: initial.x + action.dx,
+                y: initial.y + action.dy,
+            }
+            if (isOutOfBound(target_loc, this.map) || this.occupied.get(target_loc.x, target_loc.y)) {
+                diff.failed.push(action);
+                diff.reasons.push("Not enough room to throw; must have at least one space free in direction of throwing: " + entity.id
+                    + " Direction dx: " + action.dx + " dy: " + action.dy);
+                return;
+            }
+            
+            while (!isOutOfBound(target_loc, this.map) && !this.occupied.get(target_loc.x, target_loc.y)) {
+                target_loc.x += action.dx;
+                target_loc.y += action.dy;
+            }
+            
+            // if target_loc is out of bounds, then target does not exist
+            // currently has placeholder damages to different structures
+            var target_id = this.occupied.get(target_loc.x, target_loc.y);
+            var target;
+            if (target_id) {
+                target = this.entities.get(target_id);
+            }
+            if (target) {
+                // Target may or may not be destroyed
+                if (target.type === "thrower")
+                    target.hp -= 99999;
+                else if (target.type === "statue")
+                    target.hp -= 99999;
+            }
+
+            const final: Location = {
+                x: target_loc.x - action.dy,
+                y: target_loc.y - action.dy
+            }
+            held.location = final;
+            held.heldBy = undefined;
+            this.addOrUpdateEntity(held);
+            entity.holding = undefined;
+
+            diff.successful.push(action)
+            // if target exists and hp < 0, it dies and is deleted from game
+            if (target) {
+                if (target.hp <= 0) {
+                    this.deleteEntity(target.id);
+                    diff.dead.push(target);  
+                }
+                else {
+                    diff.changed.push(target);
+                }
+            }
+            diff.changed.push(entity, held);
         }
 
         if (action.action === "move" || action.action === "build") {
@@ -278,9 +432,15 @@ export class Game {
             }
 
             var newEntity: EntityData;
-            if (action.action == "move") {
+            if (action.action === "move") {
                 newEntity = {... entity};
                 newEntity.location = action.loc;
+                // location of held object moves if the holding entity moves
+                if (newEntity.holding) {
+                    held = this.entities.get(newEntity.holding) as EntityData;
+                    held.location = newEntity.location;
+                    diff.changed.push(held);
+                }
             } else {
                 newEntity = {
                     id: this.highestId + 1,

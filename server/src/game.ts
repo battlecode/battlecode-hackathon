@@ -278,6 +278,12 @@ export class Game {
                 return;
             }
 
+            if(pickup.id == action.id) {
+                diff.failed.push(action);
+                diff.reasons.push("Entity cannot pick up itself"+action.id);
+                return;
+            }
+
             if(pickup.type !== "thrower") {
                 diff.failed.push(action);
                 diff.reasons.push("Entity can only pick up Thrower, not: " + pickup.type);

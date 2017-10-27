@@ -171,32 +171,25 @@ export class Game {
             }
         }
 
+        this.dealFatigueDamage(diff);
         diff.changed_sectors = this.getChangedSectors();
         diff.next_team = this.nextTeam;
         return diff;
     }
 
-    getDeadEntities(): EntityData[] {
-        var dead: EntityData[] = [];
-        for (var entity of this.entities.values()) {
-            if (entity.hp <= 0) {
-                this.deleteEntity(entity.id);
-                dead.push(entity);
-            }
-        }
-        return dead;
-    }
-
-    dealFatigueDamage(): EntityData[] {
-        var damaged_entities: EntityData[] = [];
+    dealFatigueDamage(diff: NextTurn) {
         for (var entity of this.entities.values()) {
             if (entity.holding_end && entity.holding_end < this.nextTurn && entity.holding) {
                 entity.hp -= 1;
-                
-                damaged_entities.push(entity)
+                if (entity.hp > 0) {
+                    diff.changed.push(entity)
+                }
+                else {
+                    this.deleteEntity(entity.id);
+                    diff.dead.push(entity.id);
+                }
             }
         }
-        return damaged_entities;
     }
 
     getChangedSectors(): SectorData[] {

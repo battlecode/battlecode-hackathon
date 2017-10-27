@@ -40,7 +40,7 @@ class Entity(object):
     def _update(self, data):
         self.id = data['id']
         self.type = data['type']
-        self.team = self._game.teams[data['team']]
+        self.team = self._game.teams[data['teamID']]
         self.hp = data['hp']
         if 'location' in data:
             self.location = Location(data['location']['x'], data['location']['y'])

@@ -43,6 +43,8 @@ const setupTest = () => {
                 { id: 1, type: 'thrower', teamID: 2, location: {x: 4, y: 9}, hp: 10 },
                 { id: 2, type: 'hedge', teamID: 0, location: {x: 4, y: 8}, hp: 10 },
                 { id: 3, type: 'statue', teamID: 1, location: {x: 5, y: 5}, hp: 10 },
+                { id: 4, type: 'thrower', teamID: 1, location: {x: 6, y: 6}, hp: 10, holding: 5 },
+                { id: 5, type: 'thrower', teamID: 2, location: {x: 6, y: 6}, hp: 10, heldBy: 4 }
             ],
             sectorSize: 2
         },

@@ -47,7 +47,7 @@ export interface EntityData {
     hp: number;
     teamID: TeamID;
     cooldownEnd?: number;
-    heldBy?: boolean;
+    heldBy?: EntityID;
     holding?: EntityID;
     holdingEnd?: number;
 }

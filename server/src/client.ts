@@ -1,5 +1,5 @@
 import { Packet } from '_debugger';
-import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, MapData } from './schema';
+import { IncomingCommand, LoginConfirm, OutgoingCommand, TeamData, TeamID, MapFile } from './schema';
 
 import * as net from 'net';
 import * as byline from 'byline';

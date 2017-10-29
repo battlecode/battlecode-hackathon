@@ -57,7 +57,7 @@ export interface EntityData {
  */
 export interface SectorData {
     topLeft: Location;
-    controllingTeam: TeamID;
+    controllingTeamID: TeamID;
 }
 
 /**
@@ -65,7 +65,7 @@ export interface SectorData {
  * 
  * Note: .bch18m files consist of a gzipped MapData JSON object.
  */
-export interface MapData {
+export interface MapFile {
     /**
      * Required sanity check.
      */
@@ -110,6 +110,14 @@ export interface MapData {
      * The initial entities on the map.
      */
     entities: EntityData[];
+}
+
+export interface GameState extends MapFile {
+    /** 
+     * Sectors are not stored in a map file but are stored in the game state
+     * sent to the client.
+     */
+    sectors: SectorData[];
 }
 
 /**
@@ -207,7 +215,7 @@ export interface MakeTurn {
     /**
      * Send the turn from the previous NextTurn received.
      */
-    turn: number;
+    previousTurn: number;
     actions: Action[];
 }
 
@@ -230,7 +238,7 @@ export interface LoginConfirm {
 export interface GameStart {
     command: "start";
     gameID: GameID;
-    map: MapData;
+    initialState: GameState;
     teams: TeamData[];
 }
 
@@ -250,8 +258,8 @@ export interface NextTurn {
     failed: Action[];
     reasons: string[];
 
-    nextTeam: TeamID;
-    winner?: TeamID;
+    nextTeamID: TeamID;
+    winnerID?: TeamID;
 }
 
 /**
@@ -267,7 +275,7 @@ export interface ClientError {
  */
 export interface Keyframe {
     command: "keyframe";
-    map: MapData;
+    state: GameState;
     teams: TeamData[];
 }
 
@@ -301,7 +309,7 @@ export interface CreateGame {
      * The map the gameID will be played on.
      * Use a string to load a built-in map file with that name (case sensitive.)
      */
-    map: MapData | string;
+    map: MapFile | string;
 
     /**
      * States that the client is interested in receiving a replay when the game is complete.
@@ -323,7 +331,7 @@ export interface ListMapsResponse {
     command: "listMapsResponse";
 
     mapNames: string[];
-    maps: MapData[];
+    maps: MapFile[];
 }
 
 export interface ListReplaysRequest {
@@ -382,8 +390,8 @@ export interface MatchData {
     version: "battlecode 2017 hackathon match",
 
     gameID: GameID;
-    map: MapData;
-    winner?: TeamData;
+    initialState: GameState;
+    winner?: TeamID;
     teams: TeamData[];
     turns: NextTurn[];
 }

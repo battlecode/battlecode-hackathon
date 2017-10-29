@@ -5,6 +5,7 @@ import ujson as json
 import math
 import io
 import time
+import copy
 
 # pylint: disable = too-many-instance-attributes, invalid-name, W0622, W0212
 
@@ -55,7 +56,6 @@ def direction_to_delta(direction):
             assert False, "Invalid Direction Given"
     return (delx, dely)
 
-
 class Direction(Enum):
     ''' This is an enum for direction '''
     NORTH = 0
@@ -67,8 +67,6 @@ class Direction(Enum):
     WEST = 6
     NORTH_WEST = 7
 
-
-
 class Entity(object):
     '''
     An entity in the world: a Thrower, Hedge, or Statue.
@@ -78,8 +76,8 @@ class Entity(object):
     next turn.
     '''
 
-    def __init__(self, game):
-        self._game = game
+    def __init__(self, state):
+        self._state = state
 
         self.id = None
         self.type = None
@@ -101,7 +99,7 @@ class Entity(object):
     def _update(self, data):
         self.id = data['id']
         self.type = data['type']
-        self.team = self._game.teams[data['teamID']]
+        self.team = self._state._game.teams[data['teamID']]
         self.hp = data['hp']
         if 'location' in data:
             self.location = Location(data['location']['x'], data['location']['y'])
@@ -111,7 +109,7 @@ class Entity(object):
         if 'cooldownEnd' in data:
             self.cooldown_end = data['cooldownEnd']
         else: 
-            self.cooldown_end = self._game.state.turn
+            self.cooldown_end = self._state.turn
 
         if 'holdingEnd' in data:
             self.holding_end = data['holdingEnd']
@@ -119,12 +117,12 @@ class Entity(object):
             self.holding_end = 0
 
         if 'heldBy' in data:
-            self.held_by = self._game.entities[data['heldBy']]
+            self.held_by = self._state.entities[data['heldBy']]
         else:
             self.held_by = None
 
         if 'holding' in data:
-            self.holding = self._game.state.entities[data['holding']]
+            self.holding = self._state.entities[data['holding']]
         else:
             self.holding = None
 
@@ -133,7 +131,7 @@ class Entity(object):
         '''The number of turns left in this entity's cooldown.'''
         if self.cooldown_end is None:
             return 0
-        return max(self._game.state.turn - self.cooldown_end, 0)
+        return max(self._state.turn - self.cooldown_end, 0)
 
     @property
     def turns_until_drop(self):
@@ -145,7 +143,7 @@ class Entity(object):
 
     @property
     def is_statue(self):
-        return self.statue == STATUE
+        return self.type == STATUE
 
     @property
     def is_holding(self):
@@ -155,7 +153,7 @@ class Entity(object):
     def can_act(self):
         ''' Returns true if this is a robot with no cooldown. If either is
         false then this entity cannot perform any actions this turn.'''
-        return ((self.cooldown_end <= self._game.state.turn) and self.is_robot)
+        return ((self.cooldown_end <= self._state.turn) and self.is_robot)
 
     @property
     def can_be_picked(self):
@@ -177,8 +175,8 @@ class Entity(object):
             return False
 
         location = self.location.adjacent_location_in_direction(direction)
-        entity = self._game.state.entity_at_location(location)
-        on_map = self._game.map.location_on_map(location)
+        entity = self._state.entity_at_location(location)
+        on_map = self._state.map.location_on_map(location)
 
         if ((not on_map) or not (entity == None)):
             return False
@@ -216,7 +214,7 @@ class Entity(object):
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.can_move(direction), "Invalid move cannot move in given direction"
 
-        self._game._queue({
+        self._state._queue({
             'action': 'move',
             'id': self.id,
             'loc': {
@@ -230,7 +228,7 @@ class Entity(object):
         if __debug__:
             assert isinstance(location, Location), "Can't move to a non-location!"
 
-        self._game._queue({
+        self._state._queue({
             'action': 'move',
             'id': self.id,
             'loc': {
@@ -241,19 +239,19 @@ class Entity(object):
 
     def queue_disintegrate(self):
         '''Queues a disintegration, so that this object will disintegrate in the next turn.'''
-        self._game._queue({
+        self._state._queue({
             'action': 'disintegrate',
             'id': self.id
         })
 
-    def queue_throw(self, location):
+    def queue_throw(self, direction):
         '''Queues a move, so that this object will throw held object one square
         in given direction in the next turn.'''
         if __debug__:
             assert self.holding != None, "Not Holding anything"
 
         location = self.location.adjacent_location_in_direction(direction)
-        self._game._queue({
+        self._state._queue({
             'action': 'throw',
             'id': self.id ,
             'loc': {
@@ -266,17 +264,16 @@ class Entity(object):
         if __debug__:
             assert self.can_pickup(entity), "Invalid Pickup Command"
 
-        self._game._queue({
+        self._state._queue({
             'action': 'pickup',
             'id': self.id ,
             'pickupid': entity.id
         })
 
-
-    '''entities within a certain distance'''
     def entities_within_distance(self, distance):
+        '''entities within a certain distance'''
         near_entities = []
-        for entity in self._game.state.entities.values():
+        for entity in self._state.entities.values():
             if self.location.distance_to(entity.location) < distance:
                 near_entities.append(entity)
 
@@ -287,8 +284,6 @@ class Entity(object):
     def entities_within_distance_squared(self, distance):
         #TODO actually implement this fully
         return self.entities_within_distance(distance**2)
-
-
 
 class Location(object):
     '''An x,y location in the world.'''
@@ -307,6 +302,12 @@ class Location(object):
     def __repr__(self):
         return str(self)
 
+    def __eq__(self, other):
+        return isinstance(other, Location) and other.x == self.x and other.y == self.y
+
+    def __hash__(self):
+        return self.x << 16 | self.y
+
     def distance_to_squared(self, location):
         return (location.x-self.x)**2+(location.y-self.y)**2
 
@@ -315,19 +316,19 @@ class Location(object):
 
     def direction_to(self, location):
         if __debug__:
-            assert (location!=self), "Can not find direction to same location"
+            assert location != self, "Can not find direction to same location"
 
-        delx = location.x-self.x
-        dely = location.y-self.y
-        if(dely > 0 and delx>0):
+        delx = location.x - self.x
+        dely = location.y - self.y
+        if dely > 0 and delx > 0:
             return Direction.NORTH_EAST
-        elif(dely > 0 and delx < 0):
+        elif dely > 0 and delx < 0:
             return Direction.NORTH_WEST
-        elif(dely > 0 and delx == 0):
+        elif dely > 0 and delx == 0:
             return Direction.NORTH
-        elif(delx>0):
+        elif delx > 0:
             return Direction.SOUTH_EAST
-        elif(delx < 0):
+        elif delx < 0:
             return Direction.SOUTH_WEST
         else:
             return Direction.SOUTH
@@ -337,9 +338,8 @@ class Location(object):
         return Location(self.x+delx, self.y+dely)
 
     def location_in_direction(self, direction, distance):
-
         if __debug__:
-            assert (distance >0), "Distance has to be greater than 0"
+            assert (distance > 0), "Distance has to be greater than 0"
 
         (delx, dely) = direction_to_delta(direction)
         delx = delx*distance
@@ -347,18 +347,31 @@ class Location(object):
         return Location(self.x+delx, self.y+dely)
 
 class Sector(object):
-    def __init__(self, top_left):
-        pass
+    def __init__(self, game, top_left):
+        self._game = game
+        self.top_left = top_left
+        self.team = None
+    
+    def _update(self, data):
+        if __debug__:
+            assert self.top_left.x == data['topLeft']['x']
+            assert self.top_left.y == data['topLeft']['y']
 
+        self.team = self._game.teams[data['controllingTeamID']]
 
 class Map(object):
     '''A game map.'''
-    def __init__(self, height, width, tiles, sector_size):
+    def __init__(self, game, height, width, tiles, sector_size):
+        self._game = game
         self.height = height
         self.width = width
         self.tiles = tiles
         self.sector_size = sector_size
-        self.sectors = []
+        self._sectors = {}
+        for x in range(0, self.width, self.sector_size):
+            for y in range(0, self.height, self.sector_size):
+                top_left = Location(x, y)
+                self._sectors[top_left] = Sector(self._game, top_left)
 
     def tile_at(self, location):
         '''Get the tile at a location.'''
@@ -371,7 +384,23 @@ class Map(object):
         y = location.y
         return ((y>0 and y < self.height) and (x>0 and x < self.width))
 
+    def sector_at(self, location):
+        if __debug__:
+            assert self.location_on_map(location)
+        loc = Location(
+            location.x - location.x % self.sector_size,
+            location.y - location.y % self.sector_size
+        )
+        return self._sectors[loc]
 
+    def _update_sectors(self, data):
+        for sector_data in data:
+            top_left = Location(sector_data['topLeft']['x'], sector_data['topLeft']['y'])
+            if __debug__:
+                assert top_left.x % self.sector_size == 0
+                assert top_left.y % self.sector_size == 0
+            self._sectors[top_left]._update(sector_data)
+    
 class Team(object):
     '''Information about a team.'''
 
@@ -389,10 +418,12 @@ class Team(object):
         return str(self)
 
 class State(object):
-    def __init__(self, turn, entities):
+    def __init__(self, game, turn, map):
+        self._game = game
         # initialize other state
         self.turn = turn
-        self.entities = entities
+        self.entities = {}
+        self.map = map
 
         self.entities_by_location = {}
 
@@ -400,7 +431,6 @@ class State(object):
 
         for entity in self.entities.values():
             self.entities_by_location[entity.location] = entity
-
 
     @property
     def get_turn(self):
@@ -417,6 +447,18 @@ class State(object):
     def is_location_occupied(self, location):
         ''' Return true if there is an entity at given location'''
         return (self.entity_at_location(location)!=None)
+
+    def _queue(self, action):
+        if __debug__:
+            assert self._game.state == self, 'queueing from stale state!'
+        self._game._queue(action)
+    
+    def _update_entities(self, data):
+        for entity in data:
+            id = entity['id']
+            if id not in self.entities:
+                self.entities[id] = Entity(self)
+            self.entities[id]._update(entity)
 
 class Game(object):
     '''A game that's currently running.'''
@@ -459,21 +501,22 @@ class Game(object):
 
         self.myteam = self.teams[self.team_id]
 
-
         # initialize state info
 
-        map = start['map']
-        self.map = Map(map['width'], map['height'], map['tiles'], map['sectorSize'])
+        initialState = start['initialState']
+        map = Map(
+            self,
+            initialState['width'],
+            initialState['height'],
+            initialState['tiles'],
+            initialState['sectorSize']
+        )
 
-        entities = {}
-        self.state = State(0,{})
-        for entity in map['entities']:
-            entity_new = Entity(self)
-            entity_new._update(entity)
-            entities[entity_new.id] =  entity_new
+        self.state = State(self, 0, map) 
+        self.state._update_entities(initialState['entities'])
+        self.state.map._update_sectors(initialState['sectors'])
 
-        self.state = State(0, entities) 
-
+        self.winner = None
 
         # wait for our first turn
         # TODO: run messaging logic on another thread?
@@ -505,9 +548,10 @@ class Game(object):
 
         return result
 
-    def _finish(self):
+    def _finish(self, winner_id):
         self._socket.close()
         self._socket = None
+        self.winner = self.teams[winner_id]
 
     def next_turn(self):
         '''Submit queued actions, and wait for our next turn.'''
@@ -526,37 +570,35 @@ class Game(object):
             for dead in turn['dead']:
                 del self.state.entities[dead]
 
-            for sector in turn['changedSectors']:
-                self.map.sectors.append(sector)
+            self.state._update_entities(turn['changed'])
+            self.state.map._update_sectors(turn['changedSectors'])
 
-            for entity in turn['changed']:
-                id = entity['id']
-                if id not in self.state.entities:
-                    self.state.entities[id] = Entity(self)
-                self.state.entities[id]._update(entity)
+            self.state.turn = turn['turn']
 
-            new_state = State(turn['turn'], self.state.entities)
-            self.state = new_state
+            if 'winnerID' in turn:
+                self._finish(turn['winnerID'])
 
-            if 'winner' in turn:
-                self._finish()
-
-            if turn['nextTeam'] == self.myteam.id:
+            if turn['nextTeamID'] == self.myteam.id:
                 return
 
     def _submit_turn(self):
         self._send({
             'command': 'makeTurn',
-            'turn': self.state.turn,
+            'previousTurn': self.state.turn,
             'actions': self.state._action_queue
         })
 
     def _queue(self, action):
         self.state._action_queue.append(action)
 
-    def get_current_state(self):
-        return self.state
-
+    def turns(self):
+        while True:
+            self.next_turn()
+            if self.winner:
+                return
+            else:
+                yield self.state
+            
 class BattlecodeError(Exception):
     def __init__(self, *args, **kwargs):
         super(BattlecodeError, self).__init__(self, *args, **kwargs)

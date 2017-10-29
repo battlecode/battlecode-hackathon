@@ -1,9 +1,10 @@
 import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
-    Location, MapTile, TeamData, TeamID, MapData, GameID, NEUTRAL_TEAM } from './schema';
+    Location, MapTile, TeamData, TeamID, MapFile, GameID, NEUTRAL_TEAM, GameState } from './schema';
 import { Sector } from './zone';
 import LocationMap from './locationmap';
 import ClientError from './error';
 import deepcopy from 'deepcopy';
+import * as _ from 'lodash';
 
 function distance(a: Location, b: Location): number {
     var dx = a.x - b.x;
@@ -11,7 +12,7 @@ function distance(a: Location, b: Location): number {
     return dx * dx + dy * dy;
 }
 
-function isOutOfBound(a: Location, map: MapData): boolean {
+function isOutOfBound(a: Location, map: MapFile): boolean {
     return a.x >= map.width ||
            a.x < 0 ||
            a.y >= map.height ||
@@ -27,7 +28,8 @@ const DELAYS = {
 
 export class Game {
     id: GameID;
-    map: MapData;
+    initialState: GameState;
+    map: MapFile;
     teams: TeamData[];
     entities: Map<EntityID, EntityData>;
     occupied: LocationMap<EntityID>;
@@ -37,7 +39,7 @@ export class Game {
     nextTeam: TeamID;
     nextTurn: number;
 
-    constructor(id: GameID, map: MapData, teams: TeamData[]) {
+    constructor(id: GameID, map: MapFile, teams: TeamData[]) {
         validateTeams(teams);
         this.id = id;
         this.nextTurn = 0;
@@ -46,8 +48,9 @@ export class Game {
         this.teams = teams;
         this.nextTeam = 1;
         this.entities = new Map();
-        // occupied stores location (x, y) as keys and EntityID as values
         this.occupied = new LocationMap(map.width, map.height);
+
+        // compute sectors
         this.sectors = new LocationMap(map.width, map.height);
 
         for (var x = 0; x < this.map.width; x += this.map.sectorSize) {
@@ -59,15 +62,14 @@ export class Game {
         for (var e of map.entities) {
             this.addOrUpdateEntity(e);
         }
+
+        let state: any = _.clone(this.map);
+        state.sectors = Array.from(this.sectors.values()).map(Sector.getSectorData);
+        this.initialState = state;
     }
 
     firstTurn(): NextTurn {
-        var turn = this.makeNextTurn();
-        for (var sector of this.sectors.values()) {
-            turn.changedSectors.push(sector);
-        }
-
-        return turn;
+        return this.makeNextTurn();
     }
 
     private makeNextTurn(): NextTurn {
@@ -86,7 +88,7 @@ export class Game {
             successful: [],
             failed: [],
             reasons: [],
-            nextTeam: team
+            nextTeamID: team
         };
     }
 
@@ -106,7 +108,10 @@ export class Game {
     addOrUpdateEntity(entity: EntityData) {
         let current = this.occupied.get(entity.location.x, entity.location.y);
         if (current !== undefined && current !== entity.id) {
-            let currentEntity = <EntityData> this.entities[current];
+            let currentEntity = this.entities.get(current);
+            if (currentEntity === undefined) {
+                throw new Error("can't find entity: "+current);
+            }
 
             if (currentEntity.heldBy != entity.id && currentEntity.holding != entity.id) {
                 throw new Error("location occupied: "+JSON.stringify(entity)+current);
@@ -170,7 +175,7 @@ export class Game {
         }
 
         // spawn throwers from controlled sectors every 10 turns
-        if (this.nextTurn % 10 == 0) {
+        if (turn % 10 == 0) {
             for (var thrower of this.getNewThrowers()) {
                 this.addOrUpdateEntity(thrower);
                 diff.changed.push(thrower);
@@ -179,11 +184,11 @@ export class Game {
 
         this.dealFatigueDamage(diff);
         diff.changedSectors = this.getChangedSectors();
-        diff.nextTeam = this.nextTeam;
+        diff.nextTeamID = this.nextTeam;
 
         if (turn > 1000) {
             // TODO this is wrong
-            diff.winner = 1;
+            diff.winnerID = 1;
         }
         return diff;
     }
@@ -206,7 +211,10 @@ export class Game {
             diff.changed.push(entity);
         } else {
             if (entity.holding) {
-                let held = this.entities.get(entity.holding) as EntityData;
+                let held = this.entities.get(entity.holding);
+                if (held === undefined) {
+                    throw new Error("entity held undefined?? "+entity.holding);
+                }
                 held.heldBy = undefined;
                 this.addOrUpdateEntity(held);
                 diff.changed.push(held);
@@ -232,7 +240,7 @@ export class Game {
     *getNewThrowers(): IterableIterator<EntityData> {
         for (var sector of this.sectors.values()) {
             var statueID = sector.getSpawningStatueID();
-            if (statueID === -1) continue;
+            if (statueID === undefined) continue;
 
             // if statue exists in game  
             let statue = this.entities.get(statueID);

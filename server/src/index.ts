@@ -8,7 +8,7 @@ import {
     Login,
     LoginConfirm,
     MakeTurn,
-    MapData,
+    MapFile,
     MapTile,
     MatchData,
     NEUTRAL_TEAM,
@@ -30,10 +30,11 @@ import * as zlib from 'zlib';
 import { promisify } from 'util';
 import * as uuid from 'uuid/v4';
 import * as fs from 'fs';
+import * as _ from 'lodash';
 
 const gzip = <(string) => Promise<Buffer>>promisify(zlib.gzip);
 
-const DEFAULT_MAP: MapData = {
+const DEFAULT_MAP: MapFile = {
     version: "battlecode 2017 hackathon map",
     name: "default",
     teamCount: 2,
@@ -85,7 +86,7 @@ class Lobby {
     /**
      * The map the game will be played on.
      */
-    map: MapData;
+    map: MapFile;
 
     /**
      * The connected players.
@@ -196,7 +197,7 @@ class GameRunner {
     started: boolean;
     winner?: TeamData;
 
-    constructor(id: GameID, map: MapData, playerTeams: [Client, TeamData][], onEnd: Client[]) {
+    constructor(id: GameID, map: MapFile, playerTeams: [Client, TeamData][], onEnd: Client[]) {
         this.id = id;
         this.playerClients = [];
         this.players = new Map();
@@ -214,6 +215,7 @@ class GameRunner {
         this.onEnd = onEnd;
         this.pastTurns = [];
         this.started = false;
+
 
     }
 
@@ -237,7 +239,7 @@ class GameRunner {
         const start: GameStart = {
             command: "start",
             gameID: this.id,
-            map: this.game.map,
+            initialState: this.game.initialState,
             teams: this.game.teams
         };
         await this.broadcast(start);
@@ -251,14 +253,14 @@ class GameRunner {
         if (teamID === undefined) {
             throw new ClientError("non-player client can't make turn: "+client.id);
         }
-        const nextTurn = this.game.makeTurn(teamID, turn.turn, turn.actions);
+        const nextTurn = this.game.makeTurn(teamID, turn.previousTurn, turn.actions);
 
         await this.broadcast(nextTurn);
 
         this.pastTurns.push(nextTurn);
 
-        if (nextTurn.winner) {
-            this.winner = this.game.teams[nextTurn.winner];
+        if (nextTurn.winnerID) {
+            this.winner = this.game.teams[nextTurn.winnerID];
         }
     }
 
@@ -276,11 +278,11 @@ class GameRunner {
     async makeGzippedMatchData(): Promise<Buffer> {
         const soFar: MatchData = {
             version: "battlecode 2017 hackathon match",
-            map: this.game.map,
+            initialState: this.game.initialState,
             gameID: this.id,
             teams: this.game.teams,
             turns: this.pastTurns,
-            winner: this.winner
+            winner: this.winner ? this.winner.teamID : undefined
         };
 
         // TODO: do this in another process so we don't block running games?
@@ -302,6 +304,7 @@ class GameRunner {
         }
         return false;
     }
+
 }
 
 // TODO: this is fairly jank?

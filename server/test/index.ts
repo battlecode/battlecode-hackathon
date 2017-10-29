@@ -1,5 +1,5 @@
-import * as test from 'blue-tape';
+import test from 'ava';
 
 test('lobby', (t) => {
-    t.end();
+    t.pass();
 })

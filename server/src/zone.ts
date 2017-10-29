@@ -9,7 +9,8 @@ export class Sector {
     constructor(topLeft: Location) {
        this.teams = new Map();
        this.topLeft = topLeft;
-       this.controllingTeam = -1;
+       // by default, 'neutral' controls this sector
+       this.controllingTeam = 0;
        this.hasChanged = false;
     }
 
@@ -55,15 +56,14 @@ export class Sector {
     * returns id of team controlling sector or -1 if no team controlling
     */
     getControllingTeamID(): TeamID {
-        var control = -1;
+        var control = 0;
         for (var teamID of this.teams.keys()) {
             var team = this.getTeam(teamID);
             if (team.length > 0) {
-                if (control < 0) {
+                if (control == 0) {
                     control = teamID;
-                }
-                else {
-                    control = -1;
+                } else {
+                    control = 0;
                     break;
                 }
             }
@@ -94,14 +94,14 @@ export class Sector {
      * returns id of oldest statue from team, or -1 if no statue exists
      * oldest statue is statue with lowest id 
      */
-    getOldestStatueID(team: TeamID): EntityID {
-        var oldest: EntityID = -1; 
+    getOldestStatueID(team: TeamID): EntityID | undefined {
         if (!this.teams.has(team)) {
-            return oldest;
+            return undefined;
         }
 
+        var oldest: EntityID | undefined = undefined;
         for (var statue of this.getTeam(team)) {
-            if (oldest === -1 || statue < oldest) {
+            if (oldest === undefined || statue < oldest) {
                 oldest = statue;
             }
         }
@@ -109,16 +109,16 @@ export class Sector {
     }
     
     /**
-    * returns id of spawning statue from controlling team or -1 if no team controlling
+    * returns id of spawning statue from controlling team, if one exists
     */
-    getSpawningStatueID(): EntityID {
+    getSpawningStatueID(): EntityID | undefined {
         return this.getOldestStatueID(this.controllingTeam);
     }
 
     static getSectorData(sector: Sector): SectorData {
         var data: SectorData = {
             topLeft: sector.topLeft,
-            controllingTeam: sector.controllingTeam
+            controllingTeamID: sector.controllingTeam
         }
         return data
     }

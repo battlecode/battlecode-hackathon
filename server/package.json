@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "ts-node src/index.ts",
-    "test": "ts-node node_modules/.bin/blue-tape test/*.ts | tap-dot"
+    "test": "tsc && ava dist/test"
   },
   "repository": {
     "type": "git",
@@ -20,19 +20,19 @@
   "homepage": "https://github.com/kazimuth/battlecode-hackathon#readme",
   "dependencies": {
     "@types/byline": "^4.2.31",
+    "@types/lodash": "^4.14.80",
     "@types/node": "^8.0.31",
     "@types/uuid": "^3.4.2",
     "@types/ws": "^3.2.0",
     "ajv": "^5.2.3",
     "byline": "^5.0.0",
     "deepcopy": "^0.6.3",
+    "lodash": "^4.17.4",
     "uuid": "^3.1.0",
     "ws": "^3.2.0"
   },
   "devDependencies": {
-    "@types/blue-tape": "^0.1.31",
-    "blue-tape": "^1.0.0",
-    "tap-dot": "^1.0.5",
+    "ava": "^0.23.0",
     "ts-node": "^3.3.0",
     "typescript": "^2.5.3"
   }

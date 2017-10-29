@@ -151,24 +151,25 @@ export const NEUTRAL_TEAM: TeamData = {
 export interface MoveAction {
     action: "move";
     id: EntityID;
-    loc: Location;
+    dx: number;
+    dy: number;
 }
 export interface PickupAction {
     action: "pickup";
     id: EntityID;
-    pickupid: EntityID;
+    pickupID: EntityID;
 }
 export interface ThrowAction {
     action: "throw";
     id: EntityID;
-    // Entity throwing in dx, dy direction 
     dx: number;
     dy: number;
 }
 export interface BuildAction {
     action: "build";
     id: EntityID;
-    loc: Location;
+    dx: number;
+    dy: number;
 }
 export interface DisintegrateAction {
     action: "disintegrate";

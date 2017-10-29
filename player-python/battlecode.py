@@ -22,51 +22,50 @@ def direction_rotate_degrees_clockwise(direction, degrees):
 
     return Direction((direction.value+degrees//45%8))
 
-def direction_to_delta(direction):
-    ''' Take a direction and return a delta x and delta y to go in that
-    direction '''
-    if direction == Direction.NORTH:
-        delx = 0
-        dely = 1
-    elif direction == Direction.NORTH_EAST:
-        delx = 1
-        dely = 1
-    elif direction == Direction.NORTH_WEST:
-        delx = -1
-        dely = 1
-    elif direction == Direction.SOUTH:
-        delx = 0
-        dely = 1
-    elif direction == Direction.SOUTH_EAST:
-        delx = 1
-        dely = -1
-    elif direction == Direction.SOUTH_WEST:
-        delx = -1
-        dely = -1
-    elif direction == Direction.EAST:
-        delx = 1
-        dely = 0
-    elif direction == Direction.WEST:
-        delx = -1
-        dely = 0
-    else:
-        delx = 0
-        dely = 0
-        if __debug__:
-            assert False, "Invalid Direction Given"
-    return (delx, dely)
-
 class Direction(Enum):
     ''' This is an enum for direction '''
-    NORTH = 0
-    NORTH_EAST = 1
-    EAST = 2
-    SOUTH_EAST = 3
-    SOUTH = 4
-    SOUTH_WEST = 5
-    WEST = 6
-    NORTH_WEST = 7
+    NORTH =      ( 0,  1)
+    NORTH_EAST = ( 1,  1)
+    EAST =       ( 1,  0)
+    SOUTH_EAST = ( 1, -1)
+    SOUTH =      ( 0, -1)
+    SOUTH_WEST = (-1, -1)
+    WEST =       (-1,  0)
+    NORTH_WEST = (-1,  1)
 
+    def __init__(self, dx, dy):
+        self.dx = dx
+        self.dy = dy
+    
+    @staticmethod
+    def from_delta(dx, dy):
+        if dx < 0:
+            if dy < 0:
+                return Direction.SOUTH_WEST
+            elif dy == 0:
+                return Direction.WEST
+            elif dy > 0:
+                return Direction.NORTH_WEST
+        elif dx == 0:
+            if dy < 0:
+                return Direction.SOUTH
+            elif dy == 0:
+                return None
+            elif dy > 0:
+                return Direction.NORTH
+        elif dx > 0:
+            if dy < 0:
+                return Direction.SOUTH_EAST
+            elif dy == 0:
+                return Direction.EAST
+            elif dy > 0:
+                return Direction.NORTH_EAST
+    
+    @staticmethod
+    def all():
+        for direction in Direction:
+            yield direction
+    
 class Entity(object):
     '''
     An entity in the world: a Thrower, Hedge, or Statue.
@@ -122,7 +121,11 @@ class Entity(object):
             self.held_by = None
 
         if 'holding' in data:
-            self.holding = self._state.entities[data['holding']]
+            try:
+                self.holding = self._state.entities[data['holding']]
+            except:
+                print(self._state.entities)
+                print(data['holding'])
         else:
             self.holding = None
 
@@ -182,6 +185,8 @@ class Entity(object):
             return False
         return True
 
+    def can_build(self, direction):
+        return self.can_move(direction)
 
     def can_pickup(self, entity):
         ''' Rreturns true if entity can pickup another entitiy in given
@@ -217,25 +222,35 @@ class Entity(object):
         self._state._queue({
             'action': 'move',
             'id': self.id,
-            'loc': {
-                'x': location.x,
-                'y': location.y
-            }
+            'dx': direction.dx,
+            'dy': direction.dy
+        })
+
+    def queue_build(self, direction):
+        '''Queues a move, so that this object will move one square in given
+        direction in the next turn.'''
+        location = self.location.adjacent_location_in_direction(direction)
+
+        if __debug__:
+            assert isinstance(location, Location), "Can't move to a non-location!"
+            assert self.can_move(direction), "Invalid move cannot move in given direction"
+
+        self._state._queue({
+            'action': 'build',
+            'id': self.id,
+            'dx': direction.dx,
+            'dx': direction.dx
         })
 
     def queue_move_location(self, location):
         '''Queues a move, so that this object will move in the next turn.'''
         if __debug__:
             assert isinstance(location, Location), "Can't move to a non-location!"
+            assert self.location.distance_to_squared(location) <= 2
+        direction = self.location.direction_to(location)
 
-        self._state._queue({
-            'action': 'move',
-            'id': self.id,
-            'loc': {
-                'x': location.x,
-                'y': location.y
-            }
-        })
+        self.queue_move(direction)
+        
 
     def queue_disintegrate(self):
         '''Queues a disintegration, so that this object will disintegrate in the next turn.'''
@@ -250,14 +265,11 @@ class Entity(object):
         if __debug__:
             assert self.holding != None, "Not Holding anything"
 
-        location = self.location.adjacent_location_in_direction(direction)
         self._state._queue({
             'action': 'throw',
-            'id': self.id ,
-            'loc': {
-                'x': location.x,
-                'y': location.y
-            }
+            'id': self.id,
+            'dx': direction.dx,
+            'dy': direction.dy
         })
 
     def queue_pickup(self, entity):
@@ -267,18 +279,18 @@ class Entity(object):
         self._state._queue({
             'action': 'pickup',
             'id': self.id ,
-            'pickupid': entity.id
+            'pickupID': entity.id
         })
 
-    def entities_within_distance(self, distance):
-        '''entities within a certain distance'''
-        near_entities = []
+    def entities_within_distance(self, distance, include_held=False):
+        '''Entities within a certain distance'''
         for entity in self._state.entities.values():
+            if entity is self:
+                continue
+            if not include_held and entity.held_by is not None:
+                continue
             if self.location.distance_to(entity.location) < distance:
-                near_entities.append(entity)
-
-        near_entities.remove(self)
-        return near_entities
+                yield entity
 
     '''Entities within a certain distance squared.'''
     def entities_within_distance_squared(self, distance):
@@ -317,34 +329,22 @@ class Location(object):
     def direction_to(self, location):
         if __debug__:
             assert location != self, "Can not find direction to same location"
+        
+        dx = location.x - self.x
+        dy = location.y - self.y
 
-        delx = location.x - self.x
-        dely = location.y - self.y
-        if dely > 0 and delx > 0:
-            return Direction.NORTH_EAST
-        elif dely > 0 and delx < 0:
-            return Direction.NORTH_WEST
-        elif dely > 0 and delx == 0:
-            return Direction.NORTH
-        elif delx > 0:
-            return Direction.SOUTH_EAST
-        elif delx < 0:
-            return Direction.SOUTH_WEST
-        else:
-            return Direction.SOUTH
-
+        return Direction.from_delta(dx, dy)
+        
     def adjacent_location_in_direction(self, direction):
-        (delx, dely) = direction_to_delta(direction)
-        return Location(self.x+delx, self.y+dely)
+        return Location(self.x+direction.dx, self.y+direction.dy)
 
     def location_in_direction(self, direction, distance):
         if __debug__:
             assert (distance > 0), "Distance has to be greater than 0"
 
-        (delx, dely) = direction_to_delta(direction)
-        delx = delx*distance
-        dely = dely*distance
-        return Location(self.x+delx, self.y+dely)
+        dx = direction.dx*distance
+        dy = direction.dy*distance
+        return Location(self.x+dx, self.y+dy)
 
 class Sector(object):
     def __init__(self, game, top_left):

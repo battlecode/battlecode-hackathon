@@ -9,8 +9,9 @@ rounds = 0
 start = time.clock()
 
 for state in game.turns():
+    time.sleep(.1)
     for entity in state.entities.values():
-        if entity.team != game.myteam or not entity.can_act:
+        if entity.team != state.my_team or not entity.can_act:
             continue
         my_location = entity.location
         near_entites = entity.entities_within_distance_squared(2)

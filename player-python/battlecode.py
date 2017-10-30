@@ -1,4 +1,7 @@
+from __future__ import print_function
+
 '''Play battlecode hackathon games.'''
+
 from enum import Enum
 import socket
 import ujson as json
@@ -15,6 +18,10 @@ STATUE = 'statue'
 
 GRASS = 'G'
 DIRT = 'D'
+
+# terminal formatting
+_TERM_RED = '\033[31m'
+_TERM_END = '\033[0m'
 
 def direction_rotate_degrees_clockwise(direction, degrees):
     if __debug__:
@@ -119,7 +126,7 @@ class Entity(object):
 
         self.id = data['id']
         self.type = data['type']
-        self.team = self._state._game.teams[data['teamID']]
+        self.team = self._state.teams[data['teamID']]
         self.hp = data['hp']
         self.location = Location(data['location']['x'], data['location']['y'])
 
@@ -171,7 +178,7 @@ class Entity(object):
     def can_act(self):
         ''' Returns true if this is a robot with no cooldown. If either is
         false then this entity cannot perform any actions this turn.'''
-        return ((self.cooldown_end <= self._state.turn) and self.is_robot)
+        return self.cooldown_end < self._state.turn and self.is_robot and self.held_by is None
 
     @property
     def can_be_picked(self):
@@ -255,7 +262,7 @@ class Entity(object):
             'action': 'build',
             'id': self.id,
             'dx': direction.dx,
-            'dx': direction.dx
+            'dy': direction.dy
         })
 
     def queue_move_location(self, location):
@@ -263,10 +270,10 @@ class Entity(object):
         if __debug__:
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.location.distance_to_squared(location) <= 2
+
         direction = self.location.direction_to(location)
 
         self.queue_move(direction)
-        
 
     def queue_disintegrate(self):
         '''Queues a disintegration, so that this object will disintegrate in the next turn.'''
@@ -366,8 +373,8 @@ class Location(object):
         return Location(self.x+dx, self.y+dy)
 
 class Sector(object):
-    def __init__(self, game, top_left):
-        self._game = game
+    def __init__(self, state, top_left):
+        self._state = state
         self.top_left = top_left
         self.team = None
     
@@ -376,12 +383,12 @@ class Sector(object):
             assert self.top_left.x == data['topLeft']['x']
             assert self.top_left.y == data['topLeft']['y']
 
-        self.team = self._game.teams[data['controllingTeamID']]
+        self.team = self._state.teams[data['controllingTeamID']]
 
 class Map(object):
     '''A game map.'''
-    def __init__(self, game, height, width, tiles, sector_size):
-        self._game = game
+    def __init__(self, state, height, width, tiles, sector_size):
+        self._state = state
         self.height = height
         self.width = width
         self.tiles = tiles
@@ -391,7 +398,7 @@ class Map(object):
         for x in range(0, self.width, self.sector_size):
             for y in range(0, self.height, self.sector_size):
                 top_left = Location(x, y)
-                self._sectors[top_left] = Sector(self._game, top_left)
+                self._sectors[top_left] = Sector(self._state, top_left)
 
     def tile_at(self, location):
         '''Get the tile at a location.'''
@@ -438,12 +445,22 @@ class Team(object):
         return str(self)
 
 class State(object):
-    def __init__(self, game, turn, map):
+    def __init__(self, game, teams, my_team_id, initialState):
         self._game = game
+
+        self.map = Map(
+            self,
+            initialState['width'],
+            initialState['height'],
+            initialState['tiles'],
+            initialState['sectorSize']
+        )
+
         # initialize other state
-        self.turn = turn
+        self.turn = 0
         self.entities = {}
-        self.map = map
+        self.teams = teams
+        self.my_team = teams[my_team_id]
 
         self.entities_by_location = {}
 
@@ -451,6 +468,9 @@ class State(object):
 
         for entity in self.entities.values():
             self.entities_by_location[entity.location] = entity
+
+        self._update_entities(initialState['entities'])
+        self.map._update_sectors(initialState['sectors'])
 
     @property
     def get_turn(self):
@@ -469,8 +489,6 @@ class State(object):
         return (self.entity_at_location(location)!=None)
 
     def _queue(self, action):
-        if __debug__:
-            assert self._game.state == self, 'queueing from stale state!'
         self._game._queue(action)
     
     def _update_entities(self, data):
@@ -479,6 +497,12 @@ class State(object):
             if id not in self.entities:
                 self.entities[id] = Entity(self)
             self.entities[id]._update(entity)
+
+    def _kill_entities(self, entities):
+        for dead in entities:
+            ent = self.state.entities[dead]
+            del self.state.map._occupied[ent.location]
+            del self.state.entities[dead]
 
 class Game(object):
     '''A game that's currently running.'''
@@ -507,34 +531,22 @@ class Game(object):
         resp = self._recv()
         assert resp['command'] == 'loginConfirm'
 
-        self.team_id = resp['teamID']
+        self.my_team_id = resp['teamID']
 
         # wait for the start command
         start = self._recv()
         assert start['command'] == 'start'
 
-        team_id = resp['teamID']
-        self.teams = {}
+        teams = {}
         for team in start['teams']:
             team = Team(team['teamID'], team['name'])
-            self.teams[team.id] = team
-
-        self.myteam = self.teams[self.team_id]
+            teams[team.id] = team
 
         # initialize state info
 
         initialState = start['initialState']
-        map = Map(
-            self,
-            initialState['width'],
-            initialState['height'],
-            initialState['tiles'],
-            initialState['sectorSize']
-        )
-
-        self.state = State(self, 0, map) 
-        self.state._update_entities(initialState['entities'])
-        self.state.map._update_sectors(initialState['sectors'])
+        
+        self.state = State(self, teams, self.my_team_id, initialState)
 
         self.winner = None
 
@@ -588,9 +600,8 @@ class Game(object):
             if 'winner' in turn:
                 raise Exception('Game finished')
 
-            for dead in turn['dead']:
-                del self.state.entities[dead]
 
+            self.state._kill_entities(turn['dead'])
             self.state._update_entities(turn['changed'])
             self.state.map._update_sectors(turn['changedSectors'])
 
@@ -599,7 +610,19 @@ class Game(object):
             if 'winnerID' in turn:
                 self._finish(turn['winnerID'])
 
-            if turn['nextTeamID'] == self.myteam.id:
+            if __debug__:
+                if turn['lastTeamID'] == self.state.my_team.id:
+                    # handle what happened last turn
+                    for action, reason in zip(turn['failed'], turn['reasons']):
+                        print('{}failed: {}:{} reason: {}{}'.format(
+                            _TERM_RED,
+                            action['id'],
+                            action['action'],
+                            reason,
+                            _TERM_END
+                        ))
+
+            if turn['nextTeamID'] == self.state.my_team.id:
                 return
 
     def _submit_turn(self):
@@ -612,13 +635,20 @@ class Game(object):
     def _queue(self, action):
         self.state._action_queue.append(action)
 
-    def turns(self):
+    def turns(self, copy=True):
         while True:
             self.next_turn()
             if self.winner:
                 return
             else:
-                yield self.state
+                if copy:
+                    self.state._game = None
+                    speculative = copy.deepcopy(self.state)
+                    speculative._game = self
+                    self.state._game = self
+                    yield speculative
+                else:
+                    yield self.state
             
 class BattlecodeError(Exception):
     def __init__(self, *args, **kwargs):

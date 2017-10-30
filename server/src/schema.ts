@@ -255,6 +255,10 @@ export interface NextTurn {
     dead: EntityID[];
     changedSectors: SectorData[];
 
+    /**
+     * The ID of the previous team that went.
+     */
+    lastTeamID: TeamID;
     successful: Action[];
     failed: Action[];
     reasons: string[];

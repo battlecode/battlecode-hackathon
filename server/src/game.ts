@@ -92,6 +92,8 @@ export class Game {
             changed: [],
             dead: [],
             changedSectors: [],
+            lastTeamID: this.nextTeam - 1 == 0 ?
+                this.teams.length - 1 : this.nextTeam - 1,
             successful: [],
             failed: [],
             reasons: [],
@@ -122,12 +124,8 @@ export class Game {
 
     spawnEntity(entData: EntityData) {
         let current = this.occupied.get(entData.location.x, entData.location.y);
-        if (current !== undefined && current !== entData.id) {
-            let currentEntity = this.getEntity(current);
-
-            if (currentEntity.heldBy !== entData.id && currentEntity.holding != entData.id) {
-                throw new Error("location occupied: "+JSON.stringify(entData)+current);
-            }
+        if (current !== undefined) {
+            throw new Error("location occupied: "+JSON.stringify(entData.location));
         }
 
         if (this.entities.has(entData.id)) {

@@ -4,7 +4,6 @@ import random
 
 game = battlecode.Game('testplayer')
 
-
 rounds = 0
 
 start = time.clock()
@@ -33,6 +32,8 @@ for state in game.turns():
         near_entites = list(entity.entities_within_distance(5))
         if len(near_entites)>2:
             index = random.randrange(0, len(near_entites))
+            if near_entites[index].location == entity.location:
+                continue
             direction_to = entity.location.direction_to(near_entites[index].location)
             if entity.can_move(direction_to):
                 entity.queue_move(direction_to)

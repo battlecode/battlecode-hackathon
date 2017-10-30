@@ -70,7 +70,7 @@ export class Game {
             this.spawnEntity(e);
         }
 
-        let state: any = _.clone(this.map);
+        let state: any = _.cloneDeep(this.map);
         state.sectors = Array.from(this.sectors.values()).map(Sector.getSectorData);
         this.initialState = state;
     }
@@ -125,7 +125,7 @@ export class Game {
         if (current !== undefined && current !== entData.id) {
             let currentEntity = this.getEntity(current);
 
-            if (currentEntity.heldBy != entData.id && currentEntity.holding != entData.id) {
+            if (currentEntity.heldBy !== entData.id && currentEntity.holding != entData.id) {
                 throw new Error("location occupied: "+JSON.stringify(entData)+current);
             }
         }
@@ -134,7 +134,7 @@ export class Game {
             throw new Error("already exists: "+entData.id);
         }
         
-        if (entData.type == "statue") {
+        if (entData.type === "statue") {
             var sector = this.getSector(entData.location);
             sector.addStatue(entData);
         }
@@ -156,7 +156,7 @@ export class Game {
             throw new ClientError("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
         // we never want to give the neutral team a turn
-        if (this.nextTeam == this.teams.length - 1) {
+        if (this.nextTeam === this.teams.length - 1) {
             this.nextTeam = 1;
         } else {
             this.nextTeam++;
@@ -166,19 +166,23 @@ export class Game {
         for (let action of actions) {
             try {
                 this.doAction(team, action);
-                diff.successful.push(action)
+                if (!process.env.BATTLECODE_STRIP_ACTIONS) {
+                    diff.successful.push(action)
+                }
             } catch (e) {
-                diff.failed.push(action);
-                if (e instanceof Error) {
-                    diff.reasons.push(e.message);
-                } else {
-                    diff.reasons.push(JSON.stringify(e));
+                if (!process.env.BATTLECODE_STRIP_ACTIONS) {
+                    diff.failed.push(action);
+                    if (e instanceof Error) {
+                        diff.reasons.push(e.message);
+                    } else {
+                        diff.reasons.push(JSON.stringify(e));
+                    }
                 }
             }
         }
 
         // spawn throwers from controlled sectors every 10 turns
-        if (turn % 10 == 0) {
+        if (turn % 10 === 0) {
             for (var thrower of this.getSpawnedThrowers()) {
                 this.spawnEntity(thrower);
             }
@@ -195,6 +199,10 @@ export class Game {
         diff.dead = Array.from(this.getDeadEntities());
         diff.nextTeamID = this.nextTeam;
 
+        if (process.env.BATTLECODE_DEBUG) {
+            this.validate();
+        }
+
         if (turn > 1000) {
             // TODO this is wrong
             diff.winnerID = 1;
@@ -206,23 +214,22 @@ export class Game {
         let entity = this.getEntity(id);
         entity.hp -= damage;
         if (entity.hp <= 0) {
+            if (entity.heldBy === undefined) {
+                this.occupied.delete(entity.location.x, entity.location.y);
+            }
             if (entity.holding) {
                 let held = this.getEntity(entity.holding);
                 held.heldBy = undefined;
+                this.occupied.set(held.location.x, held.location.y, held.id);
             }
 
             // Statues do not move 
-            if (entity.type == "statue") {
+            if (entity.type === "statue") {
                 var sector = this.getSector(entity.location); 
                 sector.deleteStatue(entity);
             }
 
             this.entities.delete(entity.id);
-            
-            if (entity.heldBy === undefined) {
-                this.occupied.delete(entity.location.x, entity.location.y);
-            }
- 
             this.dead.push(entity.id);
         }
     }
@@ -242,9 +249,6 @@ export class Game {
         this.spawned = [];
         for (var entity of this.entities.values()) {
             if (entity.checkChanged()) {
-                if (entity.holding && !this.entities.has(entity.holding)) {
-                    console.log(new Error("HOLDING").stack);
-                }
                 yield entity.data;
             }
         }
@@ -293,7 +297,7 @@ export class Game {
         // TODO: deduct hp from entity if it holds an entity for too long
         var pickup = this.getEntity(action.pickupID);
 
-        if (pickup.id == action.id) {
+        if (pickup.id === action.id) {
             throw new ClientError("Entity cannot pick up itself"+action.id);
         }
 
@@ -327,8 +331,8 @@ export class Game {
         entity.holdingEnd = this.nextTurn + 10;
         pickup.heldBy = entity.id;
         // Picked-up entity occupies the same location as its holder
-        pickup.location = entity.location;
         this.occupied.delete(pickup.location.x, pickup.location.y);
+        pickup.location = entity.location;
     }
 
     private doThrow(entity: Entity, action: ThrowAction): void {
@@ -372,7 +376,6 @@ export class Game {
         held.location.x = targetLoc.x - action.dx;
         held.location.y = targetLoc.y - action.dy;
         held.heldBy = undefined;
-        //this.addOrUpdateEntity(held);
         entity.holding = undefined;
         entity.holdingEnd = undefined;
     }
@@ -389,11 +392,17 @@ export class Game {
             hp: 10
         });
     }
+
     private doMove(entity: Entity, action: MoveAction): void {
         this.occupied.delete(entity.location.x, entity.location.y);
         entity.location.x += action.dx;
         entity.location.y += action.dy;
         this.occupied.set(entity.location.x, entity.location.y, entity.id);
+        if (entity.holding !== undefined) {
+            let held = this.getEntity(entity.holding);
+            held.location.x = entity.location.x;
+            held.location.y = entity.location.y;
+        }
     }
  
     private doAction(team: TeamID, action: Action): void {
@@ -405,6 +414,14 @@ export class Game {
 
         if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.nextTurn) {
             throw new ClientError("entity still on cool down: " + entity.id);
+        }
+        
+        if (entity.type === "statue") {
+            throw new ClientError("Statues can't do anything.");
+        }
+
+        if (entity.heldBy !== undefined) {
+            throw new ClientError("Entity is held, cannot do anything");
         }
 
         if (action.action === "pickup") {
@@ -438,15 +455,94 @@ export class Game {
                 throw new ClientError("Location already occupied: " + JSON.stringify(loc));
             }
 
-            if (entity.type === "statue") {
-                throw new ClientError("Statues can't move or build. (They build automatically.)");
-            }
-
             if (action.action === "move") {
                 this.doMove(entity, action);
             } else {
                 this.doBuild(entity, action);
             }
+        }
+
+        // if we're here and didn't throw an error, the action succeeded
+        entity.cooldownEnd = this.nextTurn + COOLDOWNS[action.action];
+    }
+
+    /**
+     * Check invariants.
+     */
+    private validate() {
+        let failures: string[] = [];
+
+        let assert = (cond: boolean, s: string) => {
+            if (!cond) {
+                failures.push(s);
+            }
+        }
+        for (let entity of this.entities.values()) {
+            let id = entity.id;
+            assert(entity.hp > 0, `${id} no hp`);
+            if (entity.heldBy !== undefined) {
+                assert(this.getEntity(entity.heldBy).holding === entity.id, `${id} held by wrong`);
+                assert(entity.holding === undefined, `${id} holding while held`);
+            }
+            if (entity.holding !== undefined) {
+                let held = this.getEntity(entity.holding);
+                assert(held.heldBy === entity.id, `${id} holding wrong:
+                    ${entity.holding} held by ${held.heldBy}`);
+                assert(entity.heldBy === undefined, `${id} held while holding`);
+                assert(entity.holdingEnd !== undefined, `${id} has no holding end`);
+                assert(held.location.x == entity.location.x, `held not over holder x:
+                holder ${entity.location.x}, held ${held.location.x}`)
+                assert(held.location.y == entity.location.y, `held not over holder y:
+                holder ${entity.location.y}, held ${held.location.y}`)
+            }
+            if (entity.type !== "thrower") {
+                assert(entity.cooldownEnd === undefined, `${id} has cooldown while non-thrower`);
+            }
+            if (entity.heldBy === undefined) {
+                assert(this.occupied.get(entity.location.x, entity.location.y) === entity.id,
+                    `${id} in wrong location, should be ${entity.location.x} ${entity.location.y}`);
+            }
+            for (let other of this.entities.values()) {
+                if (other === entity) continue;
+                if (other.location.x === entity.location.x && other.location.y === entity.location.y) {
+                    assert(other.holding === entity.id || other.heldBy === entity.id,
+                        `entities in same location not holding: ${entity.id} ${other.id}`);
+                }
+            }
+        }
+        let seen: number[] = [];
+        for (let [loc, id] of this.occupied.entries()) {
+            assert(this.occupied.get(loc.x, loc.y) === id, `broken locationmap`);
+            let eLoc = this.getEntity(id).location;
+            assert(eLoc.x === loc.x, `wrong x: ${id} occupied ${loc.x}, actual ${eLoc.x}`);
+            assert(eLoc.y === loc.y, `wrong y: ${id} occupied ${loc.y}, actual ${eLoc.y}`);
+
+            assert(seen.indexOf(id) === -1, `entity multiply stored: ${id}`);
+            seen.push(id);
+        }
+        for (let [tl, sector] of this.sectors.entries()) {
+            assert(this.sectors.get(tl.x, tl.y) === sector, `broken locationmap`);
+            assert(this.getSector(tl) === sector, `broken sector lookup: ${tl.x},${tl.y}`);
+            assert(sector.topLeft.x === tl.x, `moved sector x`);
+            assert(sector.topLeft.y === tl.y, `moved sector y`);
+            for (let [teamID, entities] of sector.teams.entries()) {
+                for (let id of entities) {
+                    let entity = this.getEntity(id);
+                    assert(entity.type === 'statue', `non-statue stored in sector: ${entity.id}`);
+                    assert(this.getSector(entity.location).topLeft.x === tl.x, `entity in wrong sector`);
+                    assert(this.getSector(entity.location).topLeft.y === tl.y, `entity in wrong sector`);
+                }
+            } 
+        }
+        console.log('validate '+(this.nextTurn - 1));
+        //console.log('-----');
+        //console.log(JSON.stringify(Array.from(this.occupied.entries())));
+        //console.log(JSON.stringify(Array.from(this.entities.values()).map(e => e.data), undefined, 2));
+        if (failures.length > 0) {
+            console.log("FAILURES:")
+        }
+        for (let failure of failures) {
+            console.log(failure);
         }
     }
 }
@@ -456,7 +552,7 @@ const validateTeams = (teams: TeamData[]) => {
         throw new Error("neutral team is not first!");
     }
     for (let i = 1; i < teams.length; i++) {
-        if (teams[i].teamID != i) {
+        if (teams[i].teamID !== i) {
             throw new Error("invalid team data list");
         }
     }
@@ -471,7 +567,7 @@ export class Entity {
     dirty: boolean;
 
     constructor(data: EntityData) {
-        this.data = data;
+        this.data = _.cloneDeep(data);
 
         // slightly magical handling for locations
         const owner = this;
@@ -526,4 +622,12 @@ export class Entity {
     set heldBy(heldBy: EntityID | undefined) { this.data.heldBy = heldBy; this.dirty = true; }
     set holding(holding: EntityID | undefined) { this.data.holding = holding; this.dirty = true; }
     set holdingEnd(holdingEnd: number | undefined) { this.data.holdingEnd = holdingEnd; this.dirty = true; }
+}
+
+const COOLDOWNS = {
+    "move": 2,
+    "throw": 5,
+    "pickup": 1,
+    "build": 10,
+    "disintegrate": 0
 }

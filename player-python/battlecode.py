@@ -20,7 +20,8 @@ def direction_rotate_degrees_clockwise(direction, degrees):
     if __debug__:
         assert (degrees %45 == 0), "Rotation must be a multiple of 45 degrees"
 
-    return Direction((direction.value+degrees//45%8))
+    directions = list(Direction.all())
+    return directions[direction.value+degrees//45%8]
 
 class Direction(Enum):
     ''' This is an enum for direction '''
@@ -50,7 +51,7 @@ class Direction(Enum):
             if dy < 0:
                 return Direction.SOUTH
             elif dy == 0:
-                return None
+                raise BattlecodeError("not a valid delta: "+str(dx)+","+str(dy))
             elif dy > 0:
                 return Direction.NORTH
         elif dx > 0:
@@ -89,21 +90,38 @@ class Entity(object):
         self.holding = None
 
     def __str__(self):
-        return 'id:{},type:{},team:{},location:{}>'.format(self.id, self.type, self.team,
-                self.location)
+        contents = '<id:{},type:{},team:{},location:{}'.format(
+            self.id, self.type, self.team, self.location)
+        if self.cooldown > 0:
+            contents += ',cooldown:{}'.format(self.cooldown)
+        if self.holding is not None:
+            contents += ',holding:{},holding_end:{}'.format(self.holding.id, self.holding_end)
+        if self.held_by is not None:
+            contents += ',held_by:{}'.format(self.held_by.id)
+        contents += '>'
+        return contents
 
     def __repr__(self):
         return str(self)
 
     def _update(self, data):
+        if self.location in self._state.map._occupied and \
+            self._state.map._occupied[self.location] == self.id:
+            del self._state.map._occupied[self.location]
+
+        if __debug__:
+            if self.id is not None:
+                assert data['id'] == self.id
+            if self.type is not None:
+                assert data['type'] == self.type
+            if self.team is not None:
+                assert data['teamID'] == self.team.id
+
         self.id = data['id']
         self.type = data['type']
         self.team = self._state._game.teams[data['teamID']]
         self.hp = data['hp']
-        if 'location' in data:
-            self.location = Location(data['location']['x'], data['location']['y'])
-        else:
-            self.location = None
+        self.location = Location(data['location']['x'], data['location']['y'])
 
         if 'cooldownEnd' in data:
             self.cooldown_end = data['cooldownEnd']
@@ -119,13 +137,10 @@ class Entity(object):
             self.held_by = self._state.entities[data['heldBy']]
         else:
             self.held_by = None
+            self._state.map._occupied[self.location] = self.id
 
         if 'holding' in data:
-            try:
-                self.holding = self._state.entities[data['holding']]
-            except:
-                print(self._state.entities)
-                print(data['holding'])
+            self.holding = self._state.entities[data['holding']]
         else:
             self.holding = None
 
@@ -178,10 +193,11 @@ class Entity(object):
             return False
 
         location = self.location.adjacent_location_in_direction(direction)
-        entity = self._state.entity_at_location(location)
         on_map = self._state.map.location_on_map(location)
+        entity = self._state.entity_at_location(location)
+        occupied = location in self._state.map._occupied
 
-        if ((not on_map) or not (entity == None)):
+        if ((not on_map) or (entity is not None) or occupied):
             return False
         return True
 
@@ -317,6 +333,9 @@ class Location(object):
     def __eq__(self, other):
         return isinstance(other, Location) and other.x == self.x and other.y == self.y
 
+    def __ne__(self, other):
+        return not (self == other)
+
     def __hash__(self):
         return self.x << 16 | self.y
 
@@ -368,6 +387,7 @@ class Map(object):
         self.tiles = tiles
         self.sector_size = sector_size
         self._sectors = {}
+        self._occupied = {}
         for x in range(0, self.width, self.sector_size):
             for y in range(0, self.height, self.sector_size):
                 top_left = Location(x, y)
@@ -528,6 +548,7 @@ class Game(object):
         See server/src/schema.ts for valid messages.'''
 
         message = json.dumps(message)
+
         self._socket.write(message.encode('utf-8'))
         self._socket.write(b'\n')
         self._socket.flush()

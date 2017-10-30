@@ -215,8 +215,6 @@ class GameRunner {
         this.onEnd = onEnd;
         this.pastTurns = [];
         this.started = false;
-
-
     }
 
     async broadcast(command: OutgoingCommand) {

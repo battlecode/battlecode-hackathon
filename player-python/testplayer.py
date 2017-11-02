@@ -9,7 +9,6 @@ rounds = 0
 start = time.clock()
 
 for state in game.turns():
-    time.sleep(.1)
     for entity in state.entities.values():
         if entity.team != state.my_team or not entity.can_act:
             continue
@@ -44,7 +43,7 @@ for state in game.turns():
             if entity.can_move(direction_to):
                 entity.queue_move(direction_to)
         
-    print(state.turn)
+    print(state.turn, len(state.entities))
 
 end = time.clock()
 print('clock time: '+str(end - start))

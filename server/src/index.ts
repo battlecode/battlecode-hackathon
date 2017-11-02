@@ -68,6 +68,16 @@ const DEFAULT_MAP: MapFile = {
         {id: 9, type: "thrower", location: {x:8,y:8}, teamID: 2, hp: 10},
     ]
 };
+DEFAULT_MAP.width = 100;
+DEFAULT_MAP.height = 100;
+DEFAULT_MAP.sectorSize = 2;
+DEFAULT_MAP.tiles = new Array(100).fill(new Array(100).fill('D'));
+DEFAULT_MAP.entities = [];
+for (let i = 0; i < 100; i += 10) {
+    for (let j = 0; j < 100; j += 10) {
+        DEFAULT_MAP.entities.push({id:i*10+j, type:"statue",location:{x:i,y:j}, teamID:1+i%2, hp: 1000});
+    }
+}
 
 /**
  * Represents a game that hasn't started yet.

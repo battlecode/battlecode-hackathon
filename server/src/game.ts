@@ -76,7 +76,9 @@ export class Game {
     }
 
     firstTurn(): NextTurn {
-        return this.makeNextTurn();
+        const turn = this.makeNextTurn();
+        turn.lastTeamID = 0;
+        return turn;
     }
 
     private makeNextTurn(): NextTurn {

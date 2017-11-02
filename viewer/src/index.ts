@@ -20,7 +20,7 @@ const setupTest = () => {
     renderer = new Renderer({
         gameID: 'test',
         command: 'start',
-        map: {
+        initialState: {
             name: 'test',
             version: 'battlecode 2017 hackathon map',
             teamCount: 2,
@@ -46,7 +46,10 @@ const setupTest = () => {
                 { id: 4, type: 'thrower', teamID: 1, location: {x: 6, y: 6}, hp: 10, holding: 5 },
                 { id: 5, type: 'thrower', teamID: 2, location: {x: 6, y: 6}, hp: 10, heldBy: 4 }
             ],
-            sectorSize: 2
+            sectorSize: 10,
+            sectors: [
+                {topLeft: {x: 0, y: 0}, controllingTeamID: 0}
+            ]
         },
         teams: [
             {teamID: 0, name: 'neutral'},
@@ -65,7 +68,8 @@ const setupTest = () => {
         failed: [],
         reasons: [],
 
-        nextTeam: 1
+        lastTeamID: 0,
+        nextTeamID: 1
     });
     document.body.appendChild(renderer.domElement);
 };

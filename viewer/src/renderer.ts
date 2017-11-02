@@ -35,12 +35,12 @@ export default class Renderer {
 
     entities: Entities;
 
-    map: schema.MapData;
+    map: schema.GameState;
 
     constructor(start: schema.GameStart) {
         this.gameID = start.gameID;
         this.teamColors = makeColors(start.teams);
-        this.map = start.map;
+        this.map = start.initialState;
 
         // create a scene, that will hold all our elements such as objects, cameras and lights.
         this.scene = new Scene();
@@ -57,13 +57,13 @@ export default class Renderer {
         this.renderer.setPixelRatio(window.devicePixelRatio);
 
         // add the tiles to the world
-        const tiles = makeTiles(start.map);
+        const tiles = makeTiles(this.map);
         this.scene.add(tiles);
 
         // add the robots to the world
         this.entities = new Entities(this.scene, this.teamColors);
 
-        for (let entity of start.map.entities) {
+        for (let entity of this.map.entities) {
             this.entities.addOrUpdateEntity(entity);
         }
 
@@ -93,7 +93,7 @@ export default class Renderer {
         this.perspective.position.x = -6;
         this.perspective.position.y = -6;
         this.perspective.position.z = 2;
-        this.perspective.lookAt(new Vector3(start.map.width / 2, start.map.height / 2, 0));
+        this.perspective.lookAt(new Vector3(this.map.width / 2, this.map.height / 2, 0));
 
         this.isometric = new THREE.OrthographicCamera(- mapD * aspect, mapD * aspect, mapD, - mapD, -200, 200);
 
@@ -203,7 +203,7 @@ const makeColors = (teams: schema.TeamData[]) => {
  * 
  * TODO: this is slightly wrong??
  */
-const makeTiles = (map: schema.MapData) => {
+const makeTiles = (map: schema.GameState) => {
     const data = new Uint8Array(map.width * map.height * 4);
 
     for (let x = 0; x < map.width; x++) {

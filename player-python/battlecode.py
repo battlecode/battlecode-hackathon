@@ -4,11 +4,17 @@ from __future__ import print_function
 
 from enum import Enum
 import socket
-import ujson as json
+try:
+    import ujson as json
+except:
+    import json
 import math
 import io
 import time
-import copy
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 # pylint: disable = too-many-instance-attributes, invalid-name, W0622, W0212
 
@@ -231,7 +237,6 @@ class Entity(object):
             return False
         else:
             return True
-
 
     def queue_move(self, direction):
         '''Queues a move, so that this object will move one square in given
@@ -500,9 +505,9 @@ class State(object):
 
     def _kill_entities(self, entities):
         for dead in entities:
-            ent = self.state.entities[dead]
-            del self.state.map._occupied[ent.location]
-            del self.state.entities[dead]
+            ent = self.entities[dead]
+            del self.map._occupied[ent.location]
+            del self.entities[dead]
 
 class Game(object):
     '''A game that's currently running.'''
@@ -519,7 +524,7 @@ class Game(object):
         # conn.settimeout(5)
         conn.connect(server)
 
-        self._socket = conn.makefile('rwb', 4096)
+        self._socket = conn.makefile('rwb', 2**16)
 
         # send login command
         self._send({
@@ -584,7 +589,7 @@ class Game(object):
     def _finish(self, winner_id):
         self._socket.close()
         self._socket = None
-        self.winner = self.teams[winner_id]
+        self.winner = self.state.teams[winner_id]
 
     def next_turn(self):
         '''Submit queued actions, and wait for our next turn.'''
@@ -600,7 +605,6 @@ class Game(object):
             if 'winner' in turn:
                 raise Exception('Game finished')
 
-
             self.state._kill_entities(turn['dead'])
             self.state._update_entities(turn['changed'])
             self.state.map._update_sectors(turn['changedSectors'])
@@ -609,6 +613,7 @@ class Game(object):
 
             if 'winnerID' in turn:
                 self._finish(turn['winnerID'])
+                return
 
             if __debug__:
                 if turn['lastTeamID'] == self.state.my_team.id:
@@ -643,7 +648,7 @@ class Game(object):
             else:
                 if copy:
                     self.state._game = None
-                    speculative = copy.deepcopy(self.state)
+                    speculative = _deepcopy(self.state)
                     speculative._game = self
                     self.state._game = self
                     yield speculative
@@ -653,3 +658,7 @@ class Game(object):
 class BattlecodeError(Exception):
     def __init__(self, *args, **kwargs):
         super(BattlecodeError, self).__init__(self, *args, **kwargs)
+
+def _deepcopy(x):
+    # significantly faster than copy.deepcopy
+    return pickle.loads(pickle.dumps(x))

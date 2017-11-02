@@ -68,16 +68,6 @@ const DEFAULT_MAP: MapFile = {
         {id: 9, type: "thrower", location: {x:8,y:8}, teamID: 2, hp: 10},
     ]
 };
-DEFAULT_MAP.width = 100;
-DEFAULT_MAP.height = 100;
-DEFAULT_MAP.sectorSize = 2;
-DEFAULT_MAP.tiles = new Array(100).fill(new Array(100).fill('D'));
-DEFAULT_MAP.entities = [];
-for (let i = 0; i < 100; i += 10) {
-    for (let j = 0; j < 100; j += 10) {
-        DEFAULT_MAP.entities.push({id:i*10+j, type:"statue",location:{x:i,y:j}, teamID:1+i%2, hp: 1000});
-    }
-}
 
 /**
  * Represents a game that hasn't started yet.
@@ -338,6 +328,7 @@ const handleCommand = async (command: IncomingCommand, client: Client) => {
             })
         }
     } catch (e) {
+        console.log('hit error')
         if (e instanceof ClientError) {
             // their fault
             client.send({
@@ -480,13 +471,21 @@ const handleCreateGame = async (createGame: CreateGame, client: Client) => {
 }
 
 console.log('tcp listening on :6147');
-let tcpServer = new net.Server((socket) => {
+const cb = (socket) => {
     const client = Client.fromTCP(socket);
     console.log(client.id + " |");
     client.onCommand(handleCommand);
     client.onClose(handleClose);
-});
+};
+let tcpServer = new net.Server(cb);
 tcpServer.listen(6147);
+
+console.log('unix listening on /tmp/battlecode.sock');
+if (fs.existsSync('/tmp/battlecode.sock')) {
+    fs.unlinkSync('/tmp/battlecode.sock');
+}
+let unixServer = new net.Server(cb);
+unixServer.listen('/tmp/battlecode.sock');
 
 console.log('ws listening on :6148');
 let httpServer = new http.Server();

@@ -4,17 +4,18 @@ from __future__ import print_function
 
 from enum import Enum
 import socket
-try:
-    import ujson as json
-except:
-    import json
 import math
 import io
 import time
+import os
 try:
     import cPickle as pickle
 except:
     import pickle
+try:
+    import ujson as json
+except:
+    import json
 
 # pylint: disable = too-many-instance-attributes, invalid-name, W0622, W0212
 
@@ -509,19 +510,33 @@ class State(object):
             del self.map._occupied[ent.location]
             del self.entities[dead]
 
+if os.name == 'nt':
+    DEFAULT_SERVER = ('localhost', 6147)
+else:
+    DEFAULT_SERVER = '/tmp/battlecode.sock'
+
 class Game(object):
     '''A game that's currently running.'''
 
-    def __init__(self, name, server=('localhost', 6147)):
-        '''Connect to the server and wait for the first turn.'''
+    def __init__(self, name, server=DEFAULT_SERVER):
+        '''Connect to the server and wait for the first turn.
+        name is the name this bot would like to be called; it will be ignored on the
+        scrimmage server.
+        Server is the address to connect to. Leave it as None to connect to a default local
+        server; you shouldn't need to mess with it unless you're making custom matchmaking stuff.'''
 
         assert isinstance(name, str) \
                and len(name) > 5 and len(name) < 100, \
                'invalid team name: '+unicode(name)
 
         # setup connection
-        conn = socket.socket()
-        # conn.settimeout(5)
+        if isinstance(server, str) and server.startswith('/') and os.name != 'nt':
+            # unix domain socket
+            conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM);
+        else:
+            # tcp socket
+            conn = socket.socket()
+        # connect to the server
         conn.connect(server)
 
         self._socket = conn.makefile('rwb', 2**16)

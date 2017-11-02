@@ -106,36 +106,37 @@ export class Game {
     /**
      * returns Sector based on location
      */  
-    private getSector(location: Location): Sector {
+    private getSector(location: Location): Sector | string {
         var x = location.x - location.x % this.map.sectorSize;
         var y = location.y - location.y % this.map.sectorSize;
         var sector = this.sectors.get(x,y);
         if (!sector) {
-            throw new Error("sector does not exist: "+JSON.stringify(location));
+            return "sector does not exist: "+JSON.stringify(location);
         }
         return sector;
     }
 
-    private getEntity(id: EntityID): Entity {
+    private getEntity(id: EntityID): Entity | string {
         let entity = this.entities.get(id);
         if (!entity) {
-            throw new Error("no such entity: "+id);
+            return "no such entity: "+id;
         }
         return entity;
     }
 
-    spawnEntity(entData: EntityData) {
+    spawnEntity(entData: EntityData): string | undefined {
         let current = this.occupied.get(entData.location.x, entData.location.y);
         if (current !== undefined) {
-            throw new Error("location occupied: "+JSON.stringify(entData.location));
+            return "location occupied: "+JSON.stringify(entData.location);
         }
 
         if (this.entities.has(entData.id)) {
-            throw new Error("already exists: "+entData.id);
+            return "already exists: "+entData.id;
         }
         
         if (entData.type === "statue") {
             var sector = this.getSector(entData.location);
+            if (typeof sector === "string") return sector;
             sector.addStatue(entData);
         }
 
@@ -164,19 +165,13 @@ export class Game {
 
         var diff = this.makeNextTurn();
         for (let action of actions) {
-            try {
-                this.doAction(team, action);
-                if (!process.env.BATTLECODE_STRIP_ACTIONS) {
-                    diff.successful.push(action)
-                }
-            } catch (e) {
-                if (!process.env.BATTLECODE_STRIP_ACTIONS) {
+            let err = this.doAction(team, action);
+            if (!process.env.BATTLECODE_STRIP_ACTIONS) {
+                if (typeof err === 'string') {
                     diff.failed.push(action);
-                    if (e instanceof Error) {
-                        diff.reasons.push(e.message);
-                    } else {
-                        diff.reasons.push(JSON.stringify(e));
-                    }
+                    diff.reasons.push(err);
+                } else {
+                    diff.successful.push(action)
                 }
             }
         }
@@ -184,7 +179,10 @@ export class Game {
         // spawn throwers from controlled sectors every 10 turns
         if (turn % 10 === 0) {
             for (var thrower of this.getSpawnedThrowers()) {
-                this.spawnEntity(thrower);
+                let err = this.spawnEntity(thrower);
+                if (typeof err === 'string') {
+                    throw new Error(err);
+                }
             }
         }
         // deal fatigue damage
@@ -210,8 +208,10 @@ export class Game {
         return diff;
     }
 
-    dealDamage(id: EntityID, damage: number) {
+    dealDamage(id: EntityID, damage: number): string | undefined {
         let entity = this.getEntity(id);
+        if (typeof entity === 'string') return entity;
+
         entity.hp -= damage;
         if (entity.hp <= 0) {
             if (entity.heldBy === undefined) {
@@ -219,6 +219,7 @@ export class Game {
             }
             if (entity.holding) {
                 let held = this.getEntity(entity.holding);
+                if (typeof held === 'string') return held;
                 held.heldBy = undefined;
                 this.occupied.set(held.location.x, held.location.y, held.id);
             }
@@ -226,6 +227,7 @@ export class Game {
             // Statues do not move 
             if (entity.type === "statue") {
                 var sector = this.getSector(entity.location); 
+                if (typeof sector === 'string') return sector;
                 sector.deleteStatue(entity);
             }
 
@@ -244,7 +246,9 @@ export class Game {
 
     *getChangedEntities(): IterableIterator<EntityData> {
         for (var id of this.spawned) {
-            yield this.getEntity(id).data;
+            let ent = this.getEntity(id);
+            if (typeof ent === 'string') throw new Error(ent);
+            yield ent.data;
         }
         this.spawned = [];
         for (var entity of this.entities.values()) {
@@ -272,6 +276,7 @@ export class Game {
 
             // if statue exists in game  
             let statue = this.getEntity(statueID);
+            if (typeof statue === 'string') throw new Error(statue);
 
             // TODO full spawn logic
             let next = { x: statue.location.x + 1, y: statue.location.y };
@@ -293,38 +298,39 @@ export class Game {
         return;
     }
 
-    private doPickup(entity: Entity, action: PickupAction): void {
+    private doPickup(entity: Entity, action: PickupAction): string | undefined {
         // TODO: deduct hp from entity if it holds an entity for too long
         var pickup = this.getEntity(action.pickupID);
+        if (typeof pickup === 'string') return pickup;
 
         if (pickup.id === action.id) {
-            throw new ClientError("Entity cannot pick up itself"+action.id);
+            return "Entity cannot pick up itself"+action.id;
         }
 
         if (pickup.type !== "thrower") {
-            throw new ClientError("Entity can only pick up Thrower, not: " + pickup.type);
+            return "Entity can only pick up Thrower, not: " + pickup.type;
         }
 
         if (distance(entity.location, pickup.location) > 2) {
-            throw new ClientError("Pickup distance too far: Entity: " + JSON.stringify(entity.location)
-                + " Pickup: " + JSON.stringify(pickup.location));
+            return "Pickup distance too far: Entity: " + JSON.stringify(entity.location)
+                + " Pickup: " + JSON.stringify(pickup.location);
         }
 
         if (entity.heldBy) {
-            throw new ClientError("Held Entity cannot hold another entity: " + entity.id);
+            return "Held Entity cannot hold another entity: " + entity.id;
         }
 
         if (entity.holding) {
-            throw new ClientError("Entity already holding another entity: " + entity.id
-                + " holding: " + entity.holding);
+            return "Entity already holding another entity: " + entity.id
+                + " holding: " + entity.holding;
         }
 
         if (pickup.heldBy) {
-            throw new ClientError("Pickup target already held by another entity: " + pickup.id);
+            return "Pickup target already held by another entity: " + pickup.id;
         }
 
         if (pickup.holding) {
-            throw new ClientError("Pickup target holding another entity: " + pickup.id);
+            return "Pickup target holding another entity: " + pickup.id;
         }
 
         entity.holding = pickup.id;
@@ -335,12 +341,13 @@ export class Game {
         pickup.location = entity.location;
     }
 
-    private doThrow(entity: Entity, action: ThrowAction): void {
+    private doThrow(entity: Entity, action: ThrowAction): string | undefined {
         if (!entity.holding) {
-            throw new ClientError("Entity is not holding anything to throw: " + entity.id);
+            return "Entity is not holding anything to throw: " + entity.id;
         }
 
         var held = this.getEntity(entity.holding)
+        if (typeof held === 'string') return held;
 
         const initial = entity.location;
         var targetLoc: Location = {
@@ -348,8 +355,8 @@ export class Game {
             y: initial.y + action.dy,
         }
         if (isOutOfBound(targetLoc, this.map) || this.occupied.get(targetLoc.x, targetLoc.y)) {
-            throw new ClientError("Not enough room to throw; must have at least one space free in direction of throwing: "
-                + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy);
+            return "Not enough room to throw; must have at least one space free in direction of throwing: "
+                + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
         
         while (!isOutOfBound(targetLoc, this.map) && !this.occupied.get(targetLoc.x, targetLoc.y)) {
@@ -380,61 +387,67 @@ export class Game {
         entity.holdingEnd = undefined;
     }
 
-    private doBuild(entity: Entity, action: BuildAction): void {
-        this.spawnEntity({
+    private doBuild(entity: Entity, action: BuildAction): string | undefined {
+        return this.spawnEntity({
             id: this.highestId + 1,
             teamID: entity.teamID,
             type: "statue",
             location: {
                 x: entity.location.x + action.dx,
-                y: entity.location.x + action.dx,
+                y: entity.location.y + action.dy,
             },
             hp: 10
         });
     }
 
-    private doMove(entity: Entity, action: MoveAction): void {
+    private doMove(entity: Entity, action: MoveAction): string | undefined {
         this.occupied.delete(entity.location.x, entity.location.y);
         entity.location.x += action.dx;
         entity.location.y += action.dy;
         this.occupied.set(entity.location.x, entity.location.y, entity.id);
         if (entity.holding !== undefined) {
             let held = this.getEntity(entity.holding);
+            if (typeof held === 'string') return held;
+
             held.location.x = entity.location.x;
             held.location.y = entity.location.y;
         }
+        return;
     }
  
-    private doAction(team: TeamID, action: Action): void {
+    private doAction(team: TeamID, action: Action): string | undefined {
         var entity = this.getEntity(action.id);
+        if (typeof entity === 'string') return entity;
 
         if (entity.teamID !== team) {
-            throw new ClientError("wrong team: "+entity.teamID);
+            return "wrong team: "+entity.teamID;
         }
 
         if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.nextTurn) {
-            throw new ClientError("entity still on cool down: " + entity.id);
+            return "entity still on cool down: " + entity.id;
         }
         
         if (entity.type === "statue") {
-            throw new ClientError("Statues can't do anything.");
+            return "Statues can't do anything.";
         }
 
         if (entity.heldBy !== undefined) {
-            throw new ClientError("Entity is held, cannot do anything");
+            return "Entity is held, cannot do anything";
         }
 
+        let err;
+
         if (action.action === "pickup") {
-            this.doPickup(entity, action);
+            err = this.doPickup(entity, action);
         } else if (action.action === "throw") {
-            this.doThrow(entity, action);
+            err = this.doThrow(entity, action);
         } else if (action.action === "disintegrate") {
-            this.doDisintegrate(entity, action);
+            err = this.doDisintegrate(entity, action);
         } else if (action.action === "move" || action.action === "build") {
 
             if (action.dx === undefined || isNaN(action.dx) || action.dx < -1 || action.dx > 1 ||
                 action.dy === undefined || isNaN(action.dx) || action.dy < -1 || action.dy > 1) {
-                throw new ClientError("invalid dx,dy: "+action.dx+","+action.dy);
+                return "invalid dx,dy: "+action.dx+","+action.dy;
             }
 
             // shared logic for move and build
@@ -443,24 +456,26 @@ export class Game {
                 y: entity.location.y + action.dy,
             }
             if (distance(entity.location, loc) > 2) {
-                throw new ClientError("Distance too far: old: " + JSON.stringify(entity.location)
-                     + " new: " + loc);
+                return "Distance too far: old: " + JSON.stringify(entity.location)
+                     + " new: " + loc;
             }
 
             if (isOutOfBound(loc, this.map)) {
-                throw new ClientError("Location out of bounds of map: " + JSON.stringify(loc));
+                return "Location out of bounds of map: " + JSON.stringify(loc);
             }
 
             if (this.occupied.has(loc.x, loc.y)) {
-                throw new ClientError("Location already occupied: " + JSON.stringify(loc));
+                return "Location already occupied: " + JSON.stringify(loc);
             }
 
             if (action.action === "move") {
-                this.doMove(entity, action);
+                err = this.doMove(entity, action);
             } else {
-                this.doBuild(entity, action);
+                err = this.doBuild(entity, action);
             }
         }
+
+        if (typeof err === 'string') return err;
 
         // if we're here and didn't throw an error, the action succeeded
         entity.cooldownEnd = this.nextTurn + COOLDOWNS[action.action];
@@ -471,6 +486,12 @@ export class Game {
      */
     private validate() {
         let failures: string[] = [];
+        function unwrap<T>(v: T | string): T {
+            if (typeof v === 'string') {
+                throw new Error(v);
+            }
+            return v;
+        }
 
         let assert = (cond: boolean, s: string) => {
             if (!cond) {
@@ -481,11 +502,11 @@ export class Game {
             let id = entity.id;
             assert(entity.hp > 0, `${id} no hp`);
             if (entity.heldBy !== undefined) {
-                assert(this.getEntity(entity.heldBy).holding === entity.id, `${id} held by wrong`);
+                assert(unwrap(this.getEntity(entity.heldBy)).holding === entity.id, `${id} held by wrong`);
                 assert(entity.holding === undefined, `${id} holding while held`);
             }
             if (entity.holding !== undefined) {
-                let held = this.getEntity(entity.holding);
+                let held = unwrap(this.getEntity(entity.holding));
                 assert(held.heldBy === entity.id, `${id} holding wrong:
                     ${entity.holding} held by ${held.heldBy}`);
                 assert(entity.heldBy === undefined, `${id} held while holding`);
@@ -513,7 +534,7 @@ export class Game {
         let seen: number[] = [];
         for (let [loc, id] of this.occupied.entries()) {
             assert(this.occupied.get(loc.x, loc.y) === id, `broken locationmap`);
-            let eLoc = this.getEntity(id).location;
+            let eLoc = unwrap(this.getEntity(id)).location;
             assert(eLoc.x === loc.x, `wrong x: ${id} occupied ${loc.x}, actual ${eLoc.x}`);
             assert(eLoc.y === loc.y, `wrong y: ${id} occupied ${loc.y}, actual ${eLoc.y}`);
 
@@ -527,10 +548,10 @@ export class Game {
             assert(sector.topLeft.y === tl.y, `moved sector y`);
             for (let [teamID, entities] of sector.teams.entries()) {
                 for (let id of entities) {
-                    let entity = this.getEntity(id);
+                    let entity = unwrap(this.getEntity(id));
                     assert(entity.type === 'statue', `non-statue stored in sector: ${entity.id}`);
-                    assert(this.getSector(entity.location).topLeft.x === tl.x, `entity in wrong sector`);
-                    assert(this.getSector(entity.location).topLeft.y === tl.y, `entity in wrong sector`);
+                    assert(unwrap(this.getSector(entity.location)).topLeft.x === tl.x, `entity in wrong sector`);
+                    assert(unwrap(this.getSector(entity.location)).topLeft.y === tl.y, `entity in wrong sector`);
                 }
             } 
         }

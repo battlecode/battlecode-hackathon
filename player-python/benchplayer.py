@@ -8,7 +8,7 @@ rounds = 0
 
 start = time.clock()
 
-for state in game.turns():
+for state in game.turns(copy=False):
     for entity in state.entities.values():
         if entity.team != state.my_team or not entity.can_act:
             continue

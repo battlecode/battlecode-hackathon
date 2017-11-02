@@ -270,7 +270,7 @@ export interface NextTurn {
 /**
  * Notifies client that its message was not understood.
  */
-export interface ClientError {
+export interface ErrorCommand {
     command: "error";
     reason: string;
 }
@@ -411,5 +411,5 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
  */
 export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
     ListReplaysRequest | ReplayRequest;
-export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | ClientError | Keyframe |
+export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | ErrorCommand | Keyframe |
     ListMapsResponse | GameReplay;

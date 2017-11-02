@@ -27,7 +27,18 @@ const DELAYS = {
     build: 10
 };
 
-type FailureReason = string;
+/**
+ * Note: we return this type instead of throwing errors in the game code.
+ * This is because throwing errors is quite slow and users may submit hundreds
+ * of erroneous actions.
+ * Instead of throwing, return a FastError. To get a value out of a fast error, do:
+ * 
+ *      if (typeof val === 'string') return val;
+ * 
+ * and then use val like normal. Note that you *have to do the check* otherwise the error
+ * may be missed. Sorry, it's kinda ugly :/
+ */
+type FastError<T=undefined> = T | string;
 
 export class Game {
     id: GameID;
@@ -67,7 +78,10 @@ export class Game {
         }
 
         for (var e of map.entities) {
-            this.spawnEntity(e);
+            let err = this.spawnEntity(e);
+            if (typeof err === 'string') {
+                throw new Error(err);
+            }
         }
 
         let state: any = _.cloneDeep(this.map);
@@ -75,78 +89,29 @@ export class Game {
         this.initialState = state;
     }
 
+    /**
+     * Returns the first turn of the match.
+     * 
+     * firstTurn may throw an Error or ClientError, which should
+     * be given to the user as a schema.ErrorCommand.
+     */
     firstTurn(): NextTurn {
         const turn = this.makeNextTurn();
+        if (turn.turn !== 0) {
+            throw new Error("firstTurn called on not first turn");
+        }
+
         turn.lastTeamID = 0;
         return turn;
     }
 
-    private makeNextTurn(): NextTurn {
-        let turn = this.nextTurn;
-        let team = this.nextTeam;
-
-        this.nextTurn++;
-
-        return {
-            command: "nextTurn",
-            gameID: this.id,
-            turn: turn,
-            changed: [],
-            dead: [],
-            changedSectors: [],
-            lastTeamID: this.nextTeam - 1 == 0 ?
-                this.teams.length - 1 : this.nextTeam - 1,
-            successful: [],
-            failed: [],
-            reasons: [],
-            nextTeamID: team
-        };
-    }
-
     /**
-     * returns Sector based on location
-     */  
-    private getSector(location: Location): Sector | string {
-        var x = location.x - location.x % this.map.sectorSize;
-        var y = location.y - location.y % this.map.sectorSize;
-        var sector = this.sectors.get(x,y);
-        if (!sector) {
-            return "sector does not exist: "+JSON.stringify(location);
-        }
-        return sector;
-    }
-
-    private getEntity(id: EntityID): Entity | string {
-        let entity = this.entities.get(id);
-        if (!entity) {
-            return "no such entity: "+id;
-        }
-        return entity;
-    }
-
-    spawnEntity(entData: EntityData): string | undefined {
-        let current = this.occupied.get(entData.location.x, entData.location.y);
-        if (current !== undefined) {
-            return "location occupied: "+JSON.stringify(entData.location);
-        }
-
-        if (this.entities.has(entData.id)) {
-            return "already exists: "+entData.id;
-        }
-        
-        if (entData.type === "statue") {
-            var sector = this.getSector(entData.location);
-            if (typeof sector === "string") return sector;
-            sector.addStatue(entData);
-        }
-
-        this.entities.set(entData.id, new Entity(entData));
-        this.occupied.set(entData.location.x, entData.location.y, entData.id);
-        this.spawned.push(entData.id);
-
-        this.highestId = Math.max(entData.id, this.highestId);
-    }
-
+     * Performs a list of actions on behalf of a team and returns
+     * the result of those actions.
+     * 
+     * makeTurn may throw an Error or ClientError, which should
+     * be given to the user as a schema.ErrorCommand.
+     */
     makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
         // player will send the last turn id they received
         const correctTurn = this.nextTurn - 1;
@@ -178,7 +143,11 @@ export class Game {
 
         // spawn throwers from controlled sectors every 10 turns
         if (turn % 10 === 0) {
-            for (var thrower of this.getSpawnedThrowers()) {
+            let spawnedThrowers = this.getSpawnedThrowers();
+
+            if (typeof spawnedThrowers === 'string') throw new Error(spawnedThrowers);
+
+            for (var thrower of spawnedThrowers) {
                 let err = this.spawnEntity(thrower);
                 if (typeof err === 'string') {
                     throw new Error(err);
@@ -188,14 +157,19 @@ export class Game {
         // deal fatigue damage
         for (var entity of this.entities.values()) {
             if (entity.holdingEnd && entity.holdingEnd < this.nextTurn) {
-                this.dealDamage(entity.id, 1);
+                let err = this.dealDamage(entity.id, 1);
+                if (typeof err === 'string') {
+                    throw new Error(err);
+                }
             }
         }
  
-        diff.changedSectors = Array.from(this.getChangedSectors());
-        diff.changed = Array.from(this.getChangedEntities());
-        diff.dead = Array.from(this.getDeadEntities());
-        diff.nextTeamID = this.nextTeam;
+        diff.changedSectors = this.getChangedSectors();
+        diff.dead = this.getDeadEntities();
+
+        let changed = this.getChangedEntities();
+        if (typeof changed === 'string') throw new Error(changed);
+        diff.changed = Array.from(changed);
 
         if (process.env.BATTLECODE_DEBUG) {
             this.validate();
@@ -208,7 +182,73 @@ export class Game {
         return diff;
     }
 
-    dealDamage(id: EntityID, damage: number): string | undefined {
+    private makeNextTurn(): NextTurn {
+        let turn = this.nextTurn;
+        let team = this.nextTeam;
+
+        this.nextTurn++;
+
+        return {
+            command: "nextTurn",
+            gameID: this.id,
+            turn: turn,
+            changed: [],
+            dead: [],
+            changedSectors: [],
+            lastTeamID: this.nextTeam - 1 == 0 ?
+                this.teams.length - 1 : this.nextTeam - 1,
+            successful: [],
+            failed: [],
+            reasons: [],
+            nextTeamID: team
+        };
+    }
+
+    /**
+     * returns Sector based on location
+     */  
+    private getSector(location: Location): FastError<Sector> {
+        var x = location.x - location.x % this.map.sectorSize;
+        var y = location.y - location.y % this.map.sectorSize;
+        var sector = this.sectors.get(x,y);
+        if (!sector) {
+            return "sector does not exist: "+JSON.stringify(location);
+        }
+        return sector;
+    }
+
+    private getEntity(id: EntityID): FastError<Entity> {
+        let entity = this.entities.get(id);
+        if (!entity) {
+            return "no such entity: "+id;
+        }
+        return entity;
+    }
+
+    private spawnEntity(entData: EntityData): FastError {
+        let current = this.occupied.get(entData.location.x, entData.location.y);
+        if (current !== undefined) {
+            return "location occupied: "+JSON.stringify(entData.location);
+        }
+
+        if (this.entities.has(entData.id)) {
+            return "already exists: "+entData.id;
+        }
+        
+        if (entData.type === "statue") {
+            var sector = this.getSector(entData.location);
+            if (typeof sector === "string") return sector;
+            sector.addStatue(entData);
+        }
+
+        this.entities.set(entData.id, new Entity(entData));
+        this.occupied.set(entData.location.x, entData.location.y, entData.id);
+        this.spawned.push(entData.id);
+
+        this.highestId = Math.max(entData.id, this.highestId);
+    }
+
+    private dealDamage(id: EntityID, damage: number): FastError {
         let entity = this.getEntity(id);
         if (typeof entity === 'string') return entity;
 
@@ -236,40 +276,43 @@ export class Game {
         }
     }
 
-    *getChangedSectors(): IterableIterator<SectorData> {
+    private getChangedSectors(): SectorData[] {
+        let result = new Array<SectorData>();
         for (var sector of this.sectors.values()) {
             if (sector.checkChanged()) {
-                yield Sector.getSectorData(sector);
+                result.push(Sector.getSectorData(sector));
             }
         }
+        return result;
     }
 
-    *getChangedEntities(): IterableIterator<EntityData> {
+    private getChangedEntities(): FastError<EntityData[]> {
+        let results = new Array<EntityData>();
         for (var id of this.spawned) {
             let ent = this.getEntity(id);
-            if (typeof ent === 'string') throw new Error(ent);
-            yield ent.data;
+            if (typeof ent === 'string') return ent;
+            results.push(ent.data);
         }
         this.spawned = [];
         for (var entity of this.entities.values()) {
             if (entity.checkChanged()) {
-                yield entity.data;
+                results.push(entity.data);
             }
         }
+        return results;
     }
 
-    *getDeadEntities(): IterableIterator<EntityID> {
+    private getDeadEntities(): EntityID[] {
         let dead = this.dead;
         this.dead = [];
-        for (let id of dead) {
-            yield id;
-        }
+        return dead;
     }
 
     /**
      * Returns EntityData[] of throwers to be spawned in controlled sectors
      */
-    *getSpawnedThrowers(): IterableIterator<EntityData> {
+    private getSpawnedThrowers(): FastError<EntityData[]> {
+        let spawnedThrowers = new Array<EntityData>();
         for (var sector of this.sectors.values()) {
             var statueID = sector.getSpawningStatueID();
             if (statueID === undefined) continue;
@@ -288,17 +331,18 @@ export class Game {
                     teamID: statue.teamID,
                     hp: 10
                 };
-                yield newThrower;
+                this.highestId++;
+                spawnedThrowers.push(newThrower);
             }
         }
+        return spawnedThrowers;
     }
 
-    private doDisintegrate(entity: Entity, action: DisintegrateAction): FailureReason | undefined {
-        this.dealDamage(entity.id, entity.hp);
-        return;
+    private doDisintegrate(entity: Entity, action: DisintegrateAction): FastError {
+        return this.dealDamage(entity.id, entity.hp);
     }
 
-    private doPickup(entity: Entity, action: PickupAction): string | undefined {
+    private doPickup(entity: Entity, action: PickupAction): FastError {
         // TODO: deduct hp from entity if it holds an entity for too long
         var pickup = this.getEntity(action.pickupID);
         if (typeof pickup === 'string') return pickup;
@@ -341,7 +385,7 @@ export class Game {
         pickup.location = entity.location;
     }
 
-    private doThrow(entity: Entity, action: ThrowAction): string | undefined {
+    private doThrow(entity: Entity, action: ThrowAction): FastError {
         if (!entity.holding) {
             return "Entity is not holding anything to throw: " + entity.id;
         }
@@ -374,9 +418,11 @@ export class Game {
         if (target) {
             // Target may or may not be destroyed
             if (target.type === "thrower") {
-                this.dealDamage(target.id, 4);
+                let err = this.dealDamage(target.id, 4);
+                if (typeof err === "string") return err;
             } else if (target.type === "statue") {
-                this.dealDamage(target.id, 4);
+                let err = this.dealDamage(target.id, 4);
+                if (typeof err === "string") return err;
             }
         }
             
@@ -387,7 +433,7 @@ export class Game {
         entity.holdingEnd = undefined;
     }
 
-    private doBuild(entity: Entity, action: BuildAction): string | undefined {
+    private doBuild(entity: Entity, action: BuildAction): FastError {
         return this.spawnEntity({
             id: this.highestId + 1,
             teamID: entity.teamID,
@@ -400,7 +446,7 @@ export class Game {
         });
     }
 
-    private doMove(entity: Entity, action: MoveAction): string | undefined {
+    private doMove(entity: Entity, action: MoveAction): FastError {
         this.occupied.delete(entity.location.x, entity.location.y);
         entity.location.x += action.dx;
         entity.location.y += action.dy;
@@ -415,7 +461,7 @@ export class Game {
         return;
     }
  
-    private doAction(team: TeamID, action: Action): string | undefined {
+    private doAction(team: TeamID, action: Action): FastError {
         var entity = this.getEntity(action.id);
         if (typeof entity === 'string') return entity;
 
@@ -486,7 +532,9 @@ export class Game {
      */
     private validate() {
         let failures: string[] = [];
-        function unwrap<T>(v: T | string): T {
+
+        // it's fine to throw errors in validate because validation is already slow
+        function unwrap<T>(v: FastError<T>): T {
             if (typeof v === 'string') {
                 throw new Error(v);
             }

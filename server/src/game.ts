@@ -481,7 +481,7 @@ export class Game {
             return "wrong team: "+entity.teamID;
         }
 
-        if (entity.cooldownEnd !== undefined && entity.cooldownEnd <= this.turn) {
+        if (entity.cooldownEnd !== undefined && entity.cooldownEnd >= this.turn) {
             return "entity still on cool down: " + entity.id + "; "+
                 "ends "+entity.cooldownEnd+", current turn: "+this.turn;
         }

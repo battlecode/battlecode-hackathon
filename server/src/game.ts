@@ -28,6 +28,14 @@ const DELAYS = {
     build: 10
 };
 
+const DAMAGES = {
+    thrower: 4,
+    statue: 4,
+    recoil: 2,
+    dirt: 1,
+    fatigue: 1,
+}
+
 /**
  * Note: we return this type instead of throwing errors in the game code.
  * This is because throwing errors is quite slow and users may submit hundreds
@@ -158,7 +166,7 @@ export class Game {
         // deal fatigue damage
         for (var entity of this.entities.values()) {
             if (entity.holdingEnd && entity.holdingEnd < this.turn) {
-                let err = this.dealDamage(entity.id, 1);
+                let err = this.dealDamage(entity.id, DAMAGES.fatigue);
                 if (typeof err === 'string') {
                     throw new Error(err);
                 }
@@ -397,6 +405,10 @@ export class Game {
         pickup.location = entity.location;
     }
 
+    private getTile(loc: Location): MapTile {
+        return this.map.tiles[this.map.height - (loc.y+1)][loc.x];
+    }
+
     private doThrow(entity: Entity, action: ThrowAction): FastError {
         if (!entity.holding) {
             return "Entity is not holding anything to throw: " + entity.id;
@@ -415,13 +427,14 @@ export class Game {
                 + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
         
-        while (!isOutOfBound(targetLoc, this.map) && !this.occupied.get(targetLoc.x, targetLoc.y)) {
+        // held entity always lands 1 space before target location
+        for (var spacesThrown = 0; spacesThrown <= 7; spacesThrown++) {
+            if (isOutOfBound(targetLoc, this.map) || this.occupied.get(targetLoc.x, targetLoc.y)) { break };
             targetLoc.x += action.dx;
             targetLoc.y += action.dy;
         }
         
         // if targetLoc is out of bounds, then target does not exist
-        // currently has placeholder damages to different structures
         var targetId = this.occupied.get(targetLoc.x, targetLoc.y);
         var target;
         if (targetId) {
@@ -430,17 +443,26 @@ export class Game {
         if (target) {
             // Target may or may not be destroyed
             if (target.type === "thrower") {
-                let err = this.dealDamage(target.id, 4);
+                let err = this.dealDamage(target.id, DAMAGES.thrower);
                 if (typeof err === "string") return err;
             } else if (target.type === "statue") {
-                let err = this.dealDamage(target.id, 4);
+                let err = this.dealDamage(target.id, DAMAGES.statue);
                 if (typeof err === "string") return err;
             }
+            let err = this.dealDamage(held.id, DAMAGES.recoil);
+            if (typeof err === "string") return err;
         }
-            
-        held.location.x = targetLoc.x - action.dx;
-        held.location.y = targetLoc.y - action.dy;
+        var landloc: Location = {
+            x: targetLoc.x - action.dx,
+            y: targetLoc.y - action.dy
+        }
+        held.location.x = landloc.x;
+        held.location.y = landloc.y;
         held.heldBy = undefined;
+        // damage held unit if unit lands on dirt 
+        if (this.getTile(landloc) === "D") {
+            this.dealDamage(held.id, DAMAGES.dirt);
+        }
         entity.holding = undefined;
         entity.holdingEnd = undefined;
     }

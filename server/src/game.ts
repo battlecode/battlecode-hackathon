@@ -428,7 +428,7 @@ export class Game {
         }
         
         // held entity always lands 1 space before target location
-        for (var spacesThrown = 0; spacesThrown <= 35; spacesThrown++) {
+        for (var spacesThrown = 0; spacesThrown <= 7; spacesThrown++) {
             if (isOutOfBound(targetLoc, this.map) || this.occupied.get(targetLoc.x, targetLoc.y)) { break };
             targetLoc.x += action.dx;
             targetLoc.y += action.dy;

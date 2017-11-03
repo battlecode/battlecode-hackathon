@@ -184,8 +184,10 @@ class Entity(object):
         '''The number of turns left in this entity's cooldown.'''
         if self.cooldown_end is None:
             return 0
+        if self.cooldown_end <= self._state.turn:
+            return 0
 
-        cooldown = max(self._state.turn - self.cooldown_end, 0)
+        return self.cooldown_end - self._state.turn
 
         return cooldown
 

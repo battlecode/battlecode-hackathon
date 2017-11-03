@@ -51,7 +51,7 @@ class Direction(Enum):
     def __init__(self, dx, dy):
         self.dx = dx
         self.dy = dy
-    
+
     @staticmethod
     def from_delta(dx, dy):
         if dx < 0:
@@ -75,12 +75,12 @@ class Direction(Enum):
                 return Direction.EAST
             elif dy > 0:
                 return Direction.NORTH_EAST
-    
+
     @staticmethod
     def all():
         for direction in Direction:
             yield direction
-    
+
 class Entity(object):
     '''
     An entity in the world: a Thrower, Hedge, or Statue.
@@ -135,7 +135,7 @@ class Entity(object):
             and self.hp == other.hp \
             and self.cooldown_end == other.cooldown_end \
             and self.holding_end == other.holding_end
-    
+
     def __ne__(self, other):
         return not (self == other)
 
@@ -159,9 +159,8 @@ class Entity(object):
         self.location = Location(data['location']['x'], data['location']['y'])
 
         if 'cooldownEnd' in data:
-            print("Cooldown " + str(data['cooldownEnd']))
             self.cooldown_end = data['cooldownEnd']
-        else: 
+        else:
             self.cooldown_end = None
 
         if 'holdingEnd' in data:
@@ -224,7 +223,8 @@ class Entity(object):
         false'''
 
         # Possible change this to
-        return self.is_robot and not self.is_holding
+        return self.is_robot and not self.is_holding and not self.is_held
+
 
     @property
     def can_throw(self):
@@ -258,9 +258,11 @@ class Entity(object):
                 "is not an entity"
             assert (self != entity), "You can't pickup yourself"
 
-        if entity == self:
+        # Can't pickup self or if current'y holding
+        if entity == self or self.holding != None:
             return False
 
+        # If you can't act then you can't do anything
         if not self.can_act:
             return False
 
@@ -285,20 +287,22 @@ class Entity(object):
             'dx': direction.dx,
             'dy': direction.dy
         })
+
         if self._state.speculate:
             if self.can_move(direction):
                 del self._state.map._occupied[self.location]
                 self.location = self.location.adjacent_location_in_direction(direction)
                 self._state.map._occupied[self.location] = self.id
+                self.cooldown_end = self._state.turn + 1
 
     def queue_build(self, direction):
-        '''Queues a move, so that this object will move one square in given
-        direction in the next turn.'''
+        '''Queues a build, so that a statue of this team will be built in the
+        direction given in the next turn.'''
         location = self.location.adjacent_location_in_direction(direction)
 
         if __debug__:
             assert isinstance(location, Location), "Can't move to a non-location!"
-            assert self.can_move(direction), "Invalid move cannot move in given direction"
+            assert self.can_build(direction), "Invalid action cannot build in given direction"
 
         self._state._queue({
             'action': 'build',
@@ -306,6 +310,13 @@ class Entity(object):
             'dx': direction.dx,
             'dy': direction.dy
         })
+
+        if self._state.speculate:
+            if self.can_build(direction):
+                self.cooldown_end = self._state.turn + 10
+                # self._state._build_statue(location)
+
+
 
     def queue_move_location(self, location):
         '''Queues a move, so that this object will move in the next turn.'''
@@ -323,6 +334,11 @@ class Entity(object):
             'action': 'disintegrate',
             'id': self.id
         })
+
+        if self._state.speculate:
+            # Remove from entities
+            del self._state.map._occupied[self.location]
+            #TODO make sure nothing is held and if so update
 
     def queue_throw(self, direction):
         '''Queues a move, so that this object will throw held object one square
@@ -346,6 +362,15 @@ class Entity(object):
             'id': self.id ,
             'pickupID': entity.id
         })
+
+        if self._state.speculate:
+            if self.can_pickup(entity):
+                del self._state.map._occupied[entity.location]
+                self.holding = entity
+                entity.held_by = self
+                entity.location = self.location
+                self.holding_end = self._state.turn + 10
+                self.cooldown_end = self._state.turn + 10
 
     def entities_within_distance(self, distance, include_held=False):
         '''Entities within a certain distance'''
@@ -401,17 +426,17 @@ class Location(tuple):
         return (location.x-self.x)**2+(location.y-self.y)**2
 
     def distance_to(self, location):
-        return int(math.sqrt((location.x-self.x)**2+(location.y-self.y)**2))
+        return math.sqrt((location.x-self.x)**2+(location.y-self.y)**2)
 
     def direction_to(self, location):
         if __debug__:
             assert location != self, "Can not find direction to same location"
-        
+
         dx = location.x - self.x
         dy = location.y - self.y
 
         return Direction.from_delta(dx, dy)
-        
+
     def adjacent_location_in_direction(self, direction):
         return Location(self.x+direction.dx, self.y+direction.dy)
 
@@ -435,7 +460,7 @@ class Sector(object):
             assert self.top_left.y == data['topLeft']['y']
 
         self.team = self._state.teams[data['controllingTeamID']]
-    
+
     def __eq__(self, other):
         if not isinstance(other, Sector):
             return False
@@ -486,7 +511,7 @@ class Map(object):
                 assert top_left.x % self.sector_size == 0
                 assert top_left.y % self.sector_size == 0
             self._sectors[top_left]._update(sector_data)
-    
+
 class Team(object):
     '''Information about a team.'''
 
@@ -506,6 +531,7 @@ class Team(object):
 class State(object):
     def __init__(self, game, teams, my_team_id, initialState):
         self._game = game
+        self.max_id = 0
 
         self.map = Map(
             self,
@@ -520,6 +546,7 @@ class State(object):
         self.entities = {}
         self.teams = teams
         self.my_team = teams[my_team_id]
+        self.my_team_id = my_team_id
 
         self.entities_by_location = {}
 
@@ -551,27 +578,45 @@ class State(object):
 
     def _queue(self, action):
         self._game._queue(action)
-    
+
     def _update_entities(self, data):
         for entity in data:
             id = entity['id']
+            self.max_id = max(self.max_id, id)
             if id not in self.entities:
                 self.entities[id] = Entity(self)
             self.entities[id]._update(entity)
+
+    def _build_statue(self, location):
+        ''' Build a statue in this state at locatiion location '''
+        self.max_id+=1
+
+        data ={
+            'id': self.max_id,
+            'teamID': self.my_team_id,
+            'type': "statue",
+            'location': {
+                'x': location.x,
+                'y': location.y
+            },
+            'hp': 10
+        }
+        self.entities[self.max_id] = Entity(self)
+        self.entities[self.max_id]._update(data)
 
     def _kill_entities(self, entities):
         for dead in entities:
             ent = self.entities[dead]
             del self.map._occupied[ent.location]
             del self.entities[dead]
-    
+
     def _validate(self):
         for ent in self.entities.values():
             if not ent.is_held:
                 assert self.map._occupied[ent.location] == ent.id
         for loc, id in self.map._occupied.items():
             assert self.entities[id].location == loc
-    
+
     def _validate_keyframe(self, keyframe):
         altstate = State(self._game, self.teams, self.my_team.id, keyframe['state'])
         for id in self.entities:
@@ -640,7 +685,7 @@ class Game(object):
         # initialize state info
 
         initialState = start['initialState']
-        
+
         self.state = State(self, teams, self.my_team_id, initialState)
 
         self.winner = None
@@ -753,7 +798,7 @@ class Game(object):
                     yield speculative
                 else:
                     yield self.state
-            
+
 class BattlecodeError(Exception):
     def __init__(self, *args, **kwargs):
         super(BattlecodeError, self).__init__(self, *args, **kwargs)

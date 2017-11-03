@@ -8,7 +8,7 @@ rounds = 0
 
 start = time.clock()
 
-for state in game.turns():
+for state in game.turns(copy=False, speculate=False):
     state._validate()
     for entity in state.entities.values():
         if entity.team != state.my_team or not entity.can_act:
@@ -23,8 +23,7 @@ for state in game.turns():
                 entity.queue_move(direction)
     state._validate()
     
-    print(state.turn, len(state.entities))
-    
 end = time.clock()
+print('rounds: '+str(state.turn))
 print('clock time: '+str(end - start))
 print('per round: '+str((end - start) / 1000))

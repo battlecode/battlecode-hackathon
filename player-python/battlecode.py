@@ -185,7 +185,9 @@ class Entity(object):
         if self.cooldown_end is None:
             return 0
 
-        return max(self._state.turn - self.cooldown_end, 0)
+        cooldown = max(self._state.turn - self.cooldown_end, 0)
+
+        return cooldown
 
     @property
     def turns_until_drop(self):
@@ -725,6 +727,7 @@ class Game(object):
             'turn': self.state.turn,
             'actions': self.state._action_queue
         })
+        self.state._action_queue = []
 
     def _queue(self, action):
         self.state._action_queue.append(action)

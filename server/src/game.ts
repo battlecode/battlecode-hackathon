@@ -331,8 +331,7 @@ export class Game {
     /**
      * Returns EntityData[] of throwers to be spawned in controlled sectors
      */
-    private getSpawnedThrowers(): FastError<EntityData[]> {
-        let spawnedThrowers = new Array<EntityData>();
+    private *getSpawnedThrowers(): IterableIterator<EntityData> {
         for (var sector of this.sectors.values()) {
             var statueID = sector.getSpawningStatueID();
             if (statueID === undefined) continue;
@@ -341,8 +340,7 @@ export class Game {
             let statue = this.getEntity(statueID);
             if (typeof statue === 'string') throw new Error(statue);
 
-            // TODO full spawn logic
-            let next = { x: statue.location.x + 1, y: statue.location.y };
+            let next = this.nextLocation(statue.location);
             if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
                 var newThrower: EntityData = {
                     id: this.highestId + 1,
@@ -351,11 +349,38 @@ export class Game {
                     teamID: statue.teamID,
                     hp: 10
                 };
-                this.highestId++;
-                spawnedThrowers.push(newThrower);
+                yield newThrower;
             }
         }
-        return spawnedThrowers;
+    }
+
+    // returns a Location of first free space around given location in clockwise direction
+    private nextLocation(location: Location): Location {
+        let next = { x: location.x, y: location.y };
+        let dx = 1;
+        let dy = 0;
+        let segment_length = 1;
+        let segment_passed = 0;
+        // rotate clockwise around location until space is free or when max spaces checked
+        for (var count = 0; count <= 8; count++) {
+            next.x += dx;
+            next.y += dy;
+            segment_passed++;
+            if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
+                break;
+            }
+            if (segment_passed === segment_length) {
+                segment_passed = 0;
+                let buffer = dx;
+                dx = dy;
+                dy = -buffer;
+
+                if (dy === 0) {
+                    segment_length++;
+                }
+            }
+        }
+        return next
     }
 
     private doDisintegrate(entity: Entity, action: DisintegrateAction): FastError {
@@ -422,14 +447,14 @@ export class Game {
             x: initial.x + action.dx,
             y: initial.y + action.dy,
         }
-        if (isOutOfBound(targetLoc, this.map) || this.occupied.get(targetLoc.x, targetLoc.y)) {
+        if (isOutOfBound(targetLoc, this.map) || this.occupied.has(targetLoc.x, targetLoc.y)) {
             return "Not enough room to throw; must have at least one space free in direction of throwing: "
                 + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
         
         // held entity always lands 1 space before target location
         for (var spacesThrown = 0; spacesThrown <= 7; spacesThrown++) {
-            if (isOutOfBound(targetLoc, this.map) || this.occupied.get(targetLoc.x, targetLoc.y)) { break };
+            if (isOutOfBound(targetLoc, this.map) || this.occupied.has(targetLoc.x, targetLoc.y)) { break };
             targetLoc.x += action.dx;
             targetLoc.y += action.dy;
         }

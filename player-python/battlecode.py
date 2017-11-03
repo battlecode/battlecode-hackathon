@@ -159,6 +159,7 @@ class Entity(object):
         self.location = Location(data['location']['x'], data['location']['y'])
 
         if 'cooldownEnd' in data:
+            print("Cooldown " + str(data['cooldownEnd']))
             self.cooldown_end = data['cooldownEnd']
         else: 
             self.cooldown_end = None
@@ -465,7 +466,7 @@ class Map(object):
             assert isinstance(location, Location), "Must pass a location"
         x = location.x
         y = location.y
-        return ((y>0 and y < self.height) and (x>0 and x < self.width))
+        return ((y>=0 and y < self.height) and (x>=0 and x < self.width))
 
     def sector_at(self, location):
         if __debug__:
@@ -722,6 +723,7 @@ class Game(object):
                 return
 
     def _submit_turn(self):
+        print( self.state._action_queue)
         self._send({
             'command': 'makeTurn',
             'turn': self.state.turn,

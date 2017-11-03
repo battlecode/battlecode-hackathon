@@ -17,7 +17,7 @@ try:
 except:
     import json
 
-# pylint: disable = too-many-instance-attributes, invalid-name, W0622, W0212
+# pylint: disable = too-many-instance-attributes, invalid-name
 
 THROWER = 'thrower'
 HEDGE = 'hedge'
@@ -118,6 +118,27 @@ class Entity(object):
     def __repr__(self):
         return str(self)
 
+    def __eq__(self, other):
+        if not isinstance(other, Entity):
+            return False
+        if self.holding is not None and other.holding is not None \
+            and self.holding.id != other.holding.id:
+            return False
+        if self.held_by is not None and other.held_by is not None \
+            and self.held_by.id != other.held_by.id:
+            return False
+
+        return self.id == other.id \
+            and self.type == other.type \
+            and self.location == other.location \
+            and self.team == other.team \
+            and self.hp == other.hp \
+            and self.cooldown_end == other.cooldown_end \
+            and self.holding_end == other.holding_end
+    
+    def __ne__(self, other):
+        return not (self == other)
+
     def _update(self, data):
         if self.location in self._state.map._occupied and \
             self._state.map._occupied[self.location] == self.id:
@@ -140,12 +161,12 @@ class Entity(object):
         if 'cooldownEnd' in data:
             self.cooldown_end = data['cooldownEnd']
         else: 
-            self.cooldown_end = self._state.turn
+            self.cooldown_end = None
 
         if 'holdingEnd' in data:
             self.holding_end = data['holdingEnd']
         else:
-            self.holding_end = 0
+            self.holding_end = None
 
         if 'heldBy' in data:
             self.held_by = self._state.entities[data['heldBy']]
@@ -163,6 +184,7 @@ class Entity(object):
         '''The number of turns left in this entity's cooldown.'''
         if self.cooldown_end is None:
             return 0
+
         return max(self._state.turn - self.cooldown_end, 0)
 
     @property
@@ -182,10 +204,14 @@ class Entity(object):
         return self.holding != None
 
     @property
+    def is_held(self):
+        return self.held_by != None
+
+    @property
     def can_act(self):
         ''' Returns true if this is a robot with no cooldown. If either is
         false then this entity cannot perform any actions this turn.'''
-        return self.cooldown_end < self._state.turn and self.is_robot and self.held_by is None
+        return self.cooldown == 0 and self.is_robot and self.held_by is None
 
     @property
     def can_be_picked(self):
@@ -219,7 +245,7 @@ class Entity(object):
         return self.can_move(direction)
 
     def can_pickup(self, entity):
-        ''' Rreturns true if entity can pickup another entitiy in given
+        ''' Returns true if entity can pickup another entity in given
         direction. Otherwise returns False.'''
 
         if __debug__:
@@ -242,9 +268,9 @@ class Entity(object):
     def queue_move(self, direction):
         '''Queues a move, so that this object will move one square in given
         direction in the next turn.'''
-        location = self.location.adjacent_location_in_direction(direction)
 
         if __debug__:
+            location = self.location.adjacent_location_in_direction(direction)
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.can_move(direction), "Invalid move cannot move in given direction"
 
@@ -254,6 +280,11 @@ class Entity(object):
             'dx': direction.dx,
             'dy': direction.dy
         })
+        if self._state.speculate:
+            if self.can_move(direction):
+                del self._state.map._occupied[self.location]
+                self.location = self.location.adjacent_location_in_direction(direction)
+                self._state.map._occupied[self.location] = self.id
 
     def queue_build(self, direction):
         '''Queues a move, so that this object will move one square in given
@@ -326,16 +357,27 @@ class Entity(object):
         #TODO actually implement this fully
         return self.entities_within_distance(distance**2)
 
-class Location(object):
+class Location(tuple):
     '''An x,y location in the world.'''
 
-    def __init__(self, x, y):
-        if __debug__:
-            assert isinstance(x, int) or math.floor(x) == x, 'non-integer location: '+str(x)
-            assert isinstance(y, int) or math.floor(y) == y, 'non-integer location: '+str(y)
+    __slots__ = []
 
-        self.x = int(x)
-        self.y = int(y)
+    def __new__(cls, x=None, y=None):
+        if isinstance(x, int) and isinstance(y, int):
+            return tuple.__new__(cls, (x, y))
+        elif x is not None:
+            # used by pickle
+            return tuple.__new__(cls, x)
+        else:
+            raise Exception('invalid Location x,y: {},{}'.format(x,y))
+
+    @property
+    def x(self):
+        return tuple.__getitem__(self, 0)
+
+    @property
+    def y(self):
+        return tuple.__getitem__(self, 1)
 
     def __str__(self):
         return '<{},{}>'.format(self.x, self.y)
@@ -344,13 +386,11 @@ class Location(object):
         return str(self)
 
     def __eq__(self, other):
-        return isinstance(other, Location) and other.x == self.x and other.y == self.y
+        if type(other) is not Location:
+            return False
+        return self[0] == other[0] and self[1] == other[1]
 
-    def __ne__(self, other):
-        return not (self == other)
-
-    def __hash__(self):
-        return self.x << 16 | self.y
+    __hash__ = tuple.__hash__
 
     def distance_to_squared(self, location):
         return (location.x-self.x)**2+(location.y-self.y)**2
@@ -383,13 +423,21 @@ class Sector(object):
         self._state = state
         self.top_left = top_left
         self.team = None
-    
+
     def _update(self, data):
         if __debug__:
             assert self.top_left.x == data['topLeft']['x']
             assert self.top_left.y == data['topLeft']['y']
 
         self.team = self._state.teams[data['controllingTeamID']]
+    
+    def __eq__(self, other):
+        if not isinstance(other, Sector):
+            return False
+        return self.top_left == other.top_left and self.team == other.team
+
+    def __ne__(self, other):
+        return not (self == other)
 
 class Map(object):
     '''A game map.'''
@@ -478,6 +526,8 @@ class State(object):
         self._update_entities(initialState['entities'])
         self.map._update_sectors(initialState['sectors'])
 
+        self.speculate = True
+
     @property
     def get_turn(self):
         return self.turn
@@ -509,6 +559,26 @@ class State(object):
             ent = self.entities[dead]
             del self.map._occupied[ent.location]
             del self.entities[dead]
+    
+    def _validate(self):
+        for ent in self.entities.values():
+            if not ent.is_held:
+                assert self.map._occupied[ent.location] == ent.id
+        for loc, id in self.map._occupied.items():
+            assert self.entities[id].location == loc
+    
+    def _validate_keyframe(self, keyframe):
+        altstate = State(self._game, self.teams, self.my_team.id, keyframe['state'])
+        for id in self.entities:
+            assert id in altstate.entities
+            assert self.entities[id] == altstate.entities[id],\
+                (self.entities[id], altstate.entities[id])
+        for top_left in self.map._sectors:
+            assert top_left in altstate.map._sectors
+            assert self.map._sectors[top_left] == altstate.map._sectors[top_left],\
+                (self.map._sectors[top_left] == altstate.map._sectors[top_left])
+
+        self._validate()
 
 if os.name == 'nt':
     DEFAULT_SERVER = ('localhost', 6147)
@@ -615,6 +685,10 @@ class Game(object):
         while True:
             turn = self._recv()
 
+            if turn['command'] == 'keyframe':
+                self.state._validate_keyframe(turn)
+                continue
+
             assert turn['command'] == 'nextTurn'
 
             if 'winner' in turn:
@@ -624,7 +698,7 @@ class Game(object):
             self.state._update_entities(turn['changed'])
             self.state.map._update_sectors(turn['changedSectors'])
 
-            self.state.turn = turn['turn']
+            self.state.turn = turn['turn'] + 1
 
             if 'winnerID' in turn:
                 self._finish(turn['winnerID'])
@@ -648,19 +722,22 @@ class Game(object):
     def _submit_turn(self):
         self._send({
             'command': 'makeTurn',
-            'previousTurn': self.state.turn,
+            'turn': self.state.turn,
             'actions': self.state._action_queue
         })
 
     def _queue(self, action):
         self.state._action_queue.append(action)
 
-    def turns(self, copy=True):
+    def turns(self, copy=True, speculate=True):
+        if speculate:
+            copy = True
         while True:
             self.next_turn()
             if self.winner:
                 return
             else:
+                self.state.speculate = speculate
                 if copy:
                     self.state._game = None
                     speculative = _deepcopy(self.state)

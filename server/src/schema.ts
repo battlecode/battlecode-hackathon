@@ -214,9 +214,9 @@ export interface MakeTurn {
     gameID: GameID;
 
     /**
-     * Send the turn from the previous NextTurn received.
+     * Send the turn from the previous NextTurn received + 1.
      */
-    previousTurn: number;
+    turn: number;
     actions: Action[];
 }
 

@@ -1,6 +1,7 @@
 import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
     Location, MapTile, TeamData, TeamID, MapFile, GameID, NEUTRAL_TEAM, GameState,
-    EntityType, ThrowAction, DisintegrateAction, PickupAction, MoveAction, BuildAction } from './schema';
+    EntityType, ThrowAction, DisintegrateAction, PickupAction, MoveAction, BuildAction,
+    Keyframe } from './schema';
 import { Sector } from './zone';
 import LocationMap from './locationmap';
 import ClientError from './error';
@@ -53,12 +54,12 @@ export class Game {
     highestId: number;
     // ids must be consecutive
     nextTeam: TeamID;
-    nextTurn: number;
+    turn: number;
 
     constructor(id: GameID, map: MapFile, teams: TeamData[]) {
         validateTeams(teams);
         this.id = id;
-        this.nextTurn = 0;
+        this.turn = 0;
         this.highestId = 0;
         this.map = map;
         this.dead = [];
@@ -114,10 +115,10 @@ export class Game {
      */
     makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
         // player will send the last turn id they received
-        const correctTurn = this.nextTurn - 1;
-        if (turn !== correctTurn) {
-            throw new ClientError("wrong turn: given: "+turn+", should be: "+correctTurn);
+        if (turn !== this.turn + 1) {
+            throw new ClientError("wrong turn: given: "+turn+", should be: "+this.turn + 1);
         }
+        this.turn += 1;
         if (team !== this.nextTeam) {
             throw new ClientError("wrong team for turn: " + team + ", should be: "+this.nextTeam);
         }
@@ -156,7 +157,7 @@ export class Game {
         }
         // deal fatigue damage
         for (var entity of this.entities.values()) {
-            if (entity.holdingEnd && entity.holdingEnd < this.nextTurn) {
+            if (entity.holdingEnd && entity.holdingEnd < this.turn) {
                 let err = this.dealDamage(entity.id, 1);
                 if (typeof err === 'string') {
                     throw new Error(err);
@@ -183,10 +184,8 @@ export class Game {
     }
 
     private makeNextTurn(): NextTurn {
-        let turn = this.nextTurn;
+        let turn = this.turn;
         let team = this.nextTeam;
-
-        this.nextTurn++;
 
         return {
             command: "nextTurn",
@@ -202,6 +201,18 @@ export class Game {
             reasons: [],
             nextTeamID: team
         };
+    }
+
+    makeKeyframe(): Keyframe {
+        let result: Keyframe = {
+            command: "keyframe",
+            state: _.clone(this.initialState),
+            teams: this.teams
+        };
+        result.state.sectors = Array.from(this.sectors.values()).map(Sector.getSectorData);
+        result.state.entities = Array.from(this.entities.values()).map(e => e.data);
+        result.state.teamCount = this.teams.length - 1;
+        return result;
     }
 
     /**
@@ -257,6 +268,7 @@ export class Game {
             if (entity.heldBy === undefined) {
                 this.occupied.delete(entity.location.x, entity.location.y);
             }
+
             if (entity.holding) {
                 let held = this.getEntity(entity.holding);
                 if (typeof held === 'string') return held;
@@ -378,7 +390,7 @@ export class Game {
         }
 
         entity.holding = pickup.id;
-        entity.holdingEnd = this.nextTurn + 10;
+        entity.holdingEnd = this.turn + 10;
         pickup.heldBy = entity.id;
         // Picked-up entity occupies the same location as its holder
         this.occupied.delete(pickup.location.x, pickup.location.y);
@@ -469,10 +481,11 @@ export class Game {
             return "wrong team: "+entity.teamID;
         }
 
-        if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.nextTurn) {
-            return "entity still on cool down: " + entity.id;
+        if (entity.cooldownEnd !== undefined && entity.cooldownEnd <= this.turn) {
+            return "entity still on cool down: " + entity.id + "; "+
+                "ends "+entity.cooldownEnd+", current turn: "+this.turn;
         }
-        
+
         if (entity.type === "statue") {
             return "Statues can't do anything.";
         }
@@ -524,7 +537,7 @@ export class Game {
         if (typeof err === 'string') return err;
 
         // if we're here and didn't throw an error, the action succeeded
-        entity.cooldownEnd = this.nextTurn + COOLDOWNS[action.action];
+        entity.cooldownEnd = this.turn + COOLDOWNS[action.action];
     }
 
     /**
@@ -603,15 +616,12 @@ export class Game {
                 }
             } 
         }
-        console.log('validate '+(this.nextTurn - 1));
-        //console.log('-----');
-        //console.log(JSON.stringify(Array.from(this.occupied.entries())));
-        //console.log(JSON.stringify(Array.from(this.entities.values()).map(e => e.data), undefined, 2));
         if (failures.length > 0) {
             console.log("FAILURES:")
-        }
-        for (let failure of failures) {
-            console.log(failure);
+            for (let failure of failures) {
+                console.log(failure);
+            }
+            throw new Error("validation failed");
         }
     }
 }

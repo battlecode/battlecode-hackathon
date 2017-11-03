@@ -251,9 +251,13 @@ class GameRunner {
         if (teamID === undefined) {
             throw new ClientError("non-player client can't make turn: "+client.id);
         }
-        const nextTurn = this.game.makeTurn(teamID, turn.previousTurn, turn.actions);
+        const nextTurn = this.game.makeTurn(teamID, turn.turn, turn.actions);
 
         await this.broadcast(nextTurn);
+
+        if (process.env.BATTLECODE_DEBUG) {
+            await this.broadcast(this.game.makeKeyframe());
+        }
 
         this.pastTurns.push(nextTurn);
 
@@ -480,12 +484,15 @@ const cb = (socket) => {
 let tcpServer = new net.Server(cb);
 tcpServer.listen(6147);
 
-console.log('unix listening on /tmp/battlecode.sock');
-if (fs.existsSync('/tmp/battlecode.sock')) {
-    fs.unlinkSync('/tmp/battlecode.sock');
+// We're not running on windows
+if (!/^win/.test(process.platform)) {
+    console.log('unix listening on /tmp/battlecode.sock');
+    if (fs.existsSync('/tmp/battlecode.sock')) {
+        fs.unlinkSync('/tmp/battlecode.sock');
+    }
+    let unixServer = new net.Server(cb);
+    unixServer.listen('/tmp/battlecode.sock');
 }
-let unixServer = new net.Server(cb);
-unixServer.listen('/tmp/battlecode.sock');
 
 console.log('ws listening on :6148');
 let httpServer = new http.Server();

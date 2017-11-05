@@ -43,8 +43,6 @@ for state in game.turns():
             if entity.can_move(direction_to):
                 entity.queue_move(direction_to)
         
-    print(state.turn, len(state.entities))
-
 end = time.clock()
 print('clock time: '+str(end - start))
 print('per round: '+str((end - start) / 1000))

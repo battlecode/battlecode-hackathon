@@ -320,6 +320,7 @@ export interface CreateGame {
      * States that the client is interested in receiving a replay when the game is complete.
      */
     sendReplay?: boolean;
+
 }
 
 export interface CreateGameConfirm {

@@ -51,40 +51,44 @@ type FastError<T=undefined> = T | string;
 
 export class Game {
     id: GameID;
-    initialState: GameState;
-    map: MapFile;
-    teams: TeamData[];
-    entities: Map<EntityID, Entity>;
+
     dead: EntityID[];
-    spawned: EntityID[];
+    debug: boolean;
+    entities: Map<EntityID, Entity>;
+    highestId: number;
+    nextTeam: TeamID;
     occupied: LocationMap<EntityID>;
     sectors: LocationMap<Sector>;
-    highestId: number;
-    // ids must be consecutive
-    nextTeam: TeamID;
+    spawned: EntityID[];
+    teams: TeamData[];
     turn: number;
 
-    constructor(id: GameID, map: MapFile, teams: TeamData[]) {
+    initialState: GameState;
+
+    constructor(id: GameID, map: MapFile, teams: TeamData[], debug: boolean) {
         validateTeams(teams);
         this.id = id;
-        this.turn = 0;
-        this.highestId = 0;
-        this.map = map;
+
         this.dead = [];
+        this.debug = debug;
+        this.entities = new Map();
+        this.highestId = 0;
+        this.nextTeam = 1;
+        this.occupied = new LocationMap(map.width, map.height);
+        this.sectors = new LocationMap(map.width, map.height);
         this.spawned = [];
         this.teams = teams;
-        this.nextTeam = 1;
-        this.entities = new Map();
-        this.occupied = new LocationMap(map.width, map.height);
+        this.turn = 0;
 
-        // compute sectors
-        this.sectors = new LocationMap(map.width, map.height);
-
-        for (var x = 0; x < this.map.width; x += this.map.sectorSize) {
-            for(var y = 0; y < this.map.height; y += this.map.sectorSize) {
+        for (var x = 0; x < map.width; x += map.sectorSize) {
+            for(var y = 0; y < map.height; y += map.sectorSize) {
                 this.sectors.set(x, y, new Sector({y: y, x: x}));
             }
         }
+
+        let state: any = _.cloneDeep(map);
+        state.sectors = Array.from(this.sectors.values()).map(Sector.getSectorData);
+        this.initialState = state;
 
         for (var e of map.entities) {
             let err = this.spawnEntity(e);
@@ -92,10 +96,6 @@ export class Game {
                 throw new Error(err);
             }
         }
-
-        let state: any = _.cloneDeep(this.map);
-        state.sectors = Array.from(this.sectors.values()).map(Sector.getSectorData);
-        this.initialState = state;
     }
 
     /**
@@ -140,13 +140,11 @@ export class Game {
         var diff = this.makeNextTurn();
         for (let action of actions) {
             let err = this.doAction(team, action);
-            if (!process.env.BATTLECODE_STRIP_ACTIONS) {
-                if (typeof err === 'string') {
-                    diff.failed.push(action);
-                    diff.reasons.push(err);
-                } else {
-                    diff.successful.push(action)
-                }
+            if (typeof err === 'string') {
+                diff.failed.push(action);
+                diff.reasons.push(err);
+            } else {
+                diff.successful.push(action)
             }
         }
 
@@ -180,7 +178,7 @@ export class Game {
         if (typeof changed === 'string') throw new Error(changed);
         diff.changed = Array.from(changed);
 
-        if (process.env.BATTLECODE_DEBUG) {
+        if (this.debug) {
             this.validate();
         }
 
@@ -227,8 +225,8 @@ export class Game {
      * returns Sector based on location
      */  
     private getSector(location: Location): FastError<Sector> {
-        var x = location.x - location.x % this.map.sectorSize;
-        var y = location.y - location.y % this.map.sectorSize;
+        var x = location.x - location.x % this.initialState.sectorSize;
+        var y = location.y - location.y % this.initialState.sectorSize;
         var sector = this.sectors.get(x,y);
         if (!sector) {
             return "sector does not exist: "+JSON.stringify(location);
@@ -341,7 +339,7 @@ export class Game {
             if (typeof statue === 'string') throw new Error(statue);
 
             let next = this.nextLocation(statue.location);
-            if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
+            if (!isOutOfBound(next, this.initialState) && !this.occupied.has(next.x, next.y)) {
                 var newThrower: EntityData = {
                     id: this.highestId + 1,
                     type: "thrower",
@@ -366,7 +364,7 @@ export class Game {
             next.x += dx;
             next.y += dy;
             segment_passed++;
-            if (!isOutOfBound(next, this.map) && !this.occupied.has(next.x, next.y)) {
+            if (!isOutOfBound(next, this.initialState) && !this.occupied.has(next.x, next.y)) {
                 break;
             }
             if (segment_passed === segment_length) {
@@ -431,7 +429,7 @@ export class Game {
     }
 
     private getTile(loc: Location): MapTile {
-        return this.map.tiles[this.map.height - (loc.y+1)][loc.x];
+        return this.initialState.tiles[this.initialState.height - (loc.y+1)][loc.x];
     }
 
     private doThrow(entity: Entity, action: ThrowAction): FastError {
@@ -447,14 +445,14 @@ export class Game {
             x: initial.x + action.dx,
             y: initial.y + action.dy,
         }
-        if (isOutOfBound(targetLoc, this.map) || this.occupied.has(targetLoc.x, targetLoc.y)) {
+        if (isOutOfBound(targetLoc, this.initialState) || this.occupied.has(targetLoc.x, targetLoc.y)) {
             return "Not enough room to throw; must have at least one space free in direction of throwing: "
                 + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
         
         // held entity always lands 1 space before target location
         for (var spacesThrown = 0; spacesThrown <= 7; spacesThrown++) {
-            if (isOutOfBound(targetLoc, this.map) || this.occupied.has(targetLoc.x, targetLoc.y)) { break };
+            if (isOutOfBound(targetLoc, this.initialState) || this.occupied.has(targetLoc.x, targetLoc.y)) { break };
             targetLoc.x += action.dx;
             targetLoc.y += action.dy;
         }
@@ -566,7 +564,7 @@ export class Game {
                      + " new: " + loc;
             }
 
-            if (isOutOfBound(loc, this.map)) {
+            if (isOutOfBound(loc, this.initialState)) {
                 return "Location out of bounds of map: " + JSON.stringify(loc);
             }
 

@@ -3,8 +3,12 @@ import LocationMap from './locationmap';
 import clone from 'lodash-es/clone';
 import Mutex from './mutex';
 
+import * as pako from 'pako';
+import * as base64 from 'base64-js';
+import { TextDecoder } from 'text-encoding';
+
 export class State {
-    id: schema.GameID;
+    gameID: schema.GameID;
     sectors: LocationMap<schema.SectorData>;
     entities: schema.EntityData[];
     teams: schema.TeamData[];
@@ -21,7 +25,7 @@ export class State {
             this.entities[entity.id] = clone(entity);
         }
         this.teams = clone(start.teams);
-        this.id = start.gameID;
+        this.gameID = start.gameID;
         this.turn = 0;
         this.winner = undefined;
         this.width = start.initialState.width;
@@ -60,6 +64,9 @@ export class Timeline {
     changeCbs: Array<(farthest: State, nextTurn: schema.NextTurn) => void>;
 
     constructor(start: schema.GameStart, snapFreq: number = 100) {
+        this.snapshots = [];
+        this.deltas = [];
+        this.changeCbs = [];
         this.snapshots[0] = new State(start);
         this.snapFreq = snapFreq;
         this.current = clone(this.snapshots[0]);
@@ -71,8 +78,16 @@ export class Timeline {
         this.deltas[nextTurn.turn] = nextTurn;
     }
 
+    /**
+     * @param cb will be called with the state after each change of the current selected state,
+     *  and the delta that caused that change
+     */
     on(event: 'change', cb: (farthest: State, nextTurn: schema.NextTurn) => void) {
         this.changeCbs.push(cb);
+    }
+
+    get initial(): State {
+        return this.snapshots[0];
     }
 
     loadLock: Mutex = new Mutex();
@@ -96,5 +111,62 @@ export class Timeline {
 
         lock.release();
     }
+}
 
+export type TimelineCallback = (timeline: Timeline) => void;
+
+/**
+ * A collection of timelines progressing in parallel.
+ */
+export class TimelineCollection {
+    timelines: {[gameID: string]: Timeline} = Object.create(null);
+    unhandled: {[gameID: string]: schema.NextTurn[]} = Object.create(null);
+
+    gameIDs: schema.GameID[] = [];
+
+    apply(command: schema.OutgoingCommand) {
+        if (command.command === 'start') {
+            this.timelines[command.gameID] = new Timeline(command);
+            this.gameIDs.push(command.gameID);
+        } else if (command.command === 'nextTurn') {
+            let {gameID} = command;
+
+            if (this.timelines[gameID] !== undefined) {
+                console.log(command.command, gameID);
+                this.timelines[gameID].apply(command);
+            } else {
+                if (this.unhandled[gameID] === undefined) {
+                    this.unhandled[gameID] = []
+                }
+                this.unhandled[gameID].push(command);
+            }
+        } else if (command.command === 'gameReplay') {
+            let buf = base64.toByteArray(command.matchData);
+            let data = pako.ungzip(buf);
+            let json = new TextDecoder('utf-8').decode(data);
+            let matchData = <schema.MatchData>JSON.parse(json);
+            let {gameID} = matchData;
+
+            this.apply({
+                command: "start",
+                gameID: matchData.gameID,
+                initialState: matchData.initialState,
+                teams: matchData.teams
+            });
+            for (let turn of matchData.turns) {
+                this.apply(turn);
+            }
+            if (this.unhandled[matchData.gameID] !== undefined) {
+                for (let turn of this.unhandled[matchData.gameID]) {
+                    this.apply(turn);
+                }
+                delete this.unhandled[matchData.gameID];
+            }
+        }
+    }
+
+    delete(gameID: schema.GameID) {
+        delete this.timelines[gameID];
+        this.gameIDs.splice(this.gameIDs.indexOf(gameID), 1);
+    }
 }

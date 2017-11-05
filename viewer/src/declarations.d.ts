@@ -14,15 +14,10 @@ declare module '*.gif' {
     const value: string;
     export default value;
 }
+declare module '*.css' {}
 
 // fix stat's wonky @types
 declare module 'stats.js' {
     const Stats: any;
     export default Stats;
 }
-
-declare namespace JSX {
-    interface Element { }
-    interface IntrinsicElements { div: any; }
-  }
-  

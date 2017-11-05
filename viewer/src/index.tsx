@@ -60,7 +60,7 @@ let ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
 
 let timelines = new state.TimelineCollection();
 timelines.apply(testMap);
-(window as any).timelines = timelines;
+window['timelines'] = timelines;
 
 let updateCbs = new Array<() => void>();
 
@@ -84,6 +84,7 @@ ws.onmessage = (message) => {
     for (let cb of updateCbs) {
         cb();
     }
+    render();
 };
 
 // disable right-click menus
@@ -91,11 +92,16 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 
 const renderer = () => {
     if (timelines.gameIDs.length > 0) {
-        return <RendererComponent gameState={timelines.timelines[timelines.gameIDs[0]].farthest}
+        let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
+        return <RendererComponent gameState={timelines.timelines[gameID].farthest}
+                                  key={gameID}
                                   addUpdateListener={(cb) => updateCbs.push(cb)}/>
     } else {
         return 'bananas';
     }
 }
 
-Inferno.render(renderer(), document.getElementById('app'))
+const render = debounce(() => {
+    Inferno.render(renderer(), document.getElementById('app'))
+});
+render();

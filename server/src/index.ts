@@ -449,7 +449,9 @@ export default class Server {
             let src = path.join(paths.PACKAGED_MAPS, m);
             let copy = path.join(defaultPath, m);
             let isCopied = await exists(copy)
-            if (!isCopied) {
+            let srcStat = await stat(src);
+            let copyStat = await stat(copy);
+            if (!isCopied || srcStat.mtime.getTime() > copyStat.mtime.getTime()) {
                 this.log(`Copying map ${m} to ${copy}`);
                 let contents = await readFile(src);
                 await writeFile(copy, contents);
@@ -493,6 +495,7 @@ export default class Server {
 
         for (let [id, runner] of this.games.entries()) {
             if (runner instanceof Lobby && runner.isPickup) {
+                lock.release();
                 return id;
             }
         }
@@ -736,7 +739,7 @@ class Mutex {
     private lock: boolean = false;
     async acquire(): Promise<{release: () => void}> {
         while (this.lock) {
-            await new Promise(r => setTimeout(r, 5));
+            await new Promise(r => setTimeout(r, 20));
         }
         this.lock = true;
         return {

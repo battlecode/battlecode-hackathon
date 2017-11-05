@@ -21,7 +21,7 @@ const setupTest = () => {
         gameID: 'test',
         command: 'start',
         initialState: {
-            name: 'test',
+            mapName: 'test',
             version: 'battlecode 2017 hackathon map',
             teamCount: 2,
             width: 10,
@@ -112,11 +112,8 @@ ws.onmessage = (message) => {
     }
 };
 
-document.onmousemove = (e) => {
-    if (renderer) {
-        renderer.setMouse(e.pageX, e.pageY);
-    }
-};
+// disable right-click menus
+document.addEventListener('contextmenu', event => event.preventDefault());
 
 // 0: fps, 1: ms, 2: mb, 3+: custom
 // note: stats library has no types, double check your

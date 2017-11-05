@@ -12,7 +12,9 @@
       "types": [],
       "strictNullChecks": true,
       "noImplicitAny": true,
-      "allowJs": true
+      "allowJs": true,
+      "jsx": "React",
+      "jsxFactory": "createElement"
     },
     "exclude": [
       "node_modules",

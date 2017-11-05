@@ -1,0 +1,1 @@
+../../server/src/locationmap.ts

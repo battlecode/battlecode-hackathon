@@ -458,7 +458,13 @@ export class Game {
         }
         
         // if targetLoc is out of bounds, then target does not exist
-        var targetId = this.occupied.get(targetLoc.x, targetLoc.y);
+        var targetId;
+        if (isOutOfBound(targetLoc, this.initialState)){
+            targetId = undefined;
+        }
+        else {
+            targetId = this.occupied.get(targetLoc.x, targetLoc.y);
+        }
         var target;
         if (targetId) {
             target = this.getEntity(targetId);

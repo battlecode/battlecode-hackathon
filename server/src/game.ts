@@ -360,7 +360,7 @@ export class Game {
         let segment_length = 1;
         let segment_passed = 0;
         // rotate clockwise around location until space is free or when max spaces checked
-        for (var count = 0; count <= 8; count++) {
+        for (var count = 0; count < 8; count++) {
             next.x += dx;
             next.y += dy;
             segment_passed++;

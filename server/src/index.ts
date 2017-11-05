@@ -30,6 +30,7 @@ import ClientError from './error';
 import { Game } from './game';
 import { Client, ClientID } from './client';
 import * as paths from './paths';
+import Mutex from './mutex';
 
 import * as net from 'net';
 import * as http from 'http';
@@ -449,9 +450,7 @@ export default class Server {
             let src = path.join(paths.PACKAGED_MAPS, m);
             let copy = path.join(defaultPath, m);
             let isCopied = await exists(copy)
-            let srcStat = await stat(src);
-            let copyStat = await stat(copy);
-            if (!isCopied || srcStat.mtime.getTime() > copyStat.mtime.getTime()) {
+            if (!isCopied || (await stat(src)).mtime.getTime() > (await stat(copy)).mtime.getTime()) {
                 this.log(`Copying map ${m} to ${copy}`);
                 let contents = await readFile(src);
                 await writeFile(copy, contents);
@@ -730,20 +729,4 @@ const readdirRecursive = async (topRoot: string, extension: string): Promise<str
 
     paths.sort();
     return paths;
-}
-
-/**
- * lol
- */
-class Mutex {
-    private lock: boolean = false;
-    async acquire(): Promise<{release: () => void}> {
-        while (this.lock) {
-            await new Promise(r => setTimeout(r, 20));
-        }
-        this.lock = true;
-        return {
-            release: () => this.lock = false
-        }
-    }
 }

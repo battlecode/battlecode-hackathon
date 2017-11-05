@@ -1,11 +1,14 @@
 {
-  "name": "battlecode-hackathon",
+  "name": "battlehack17",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
+  "bin": {
+    "battlehack": "dist/src/cli/cli.js"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/index.ts",
+    "start": "npm run build && node dist/src/cli/cli.js",
     "test": "tsc && ava dist/test"
   },
   "repository": {
@@ -21,15 +24,28 @@
   "dependencies": {
     "@types/byline": "^4.2.31",
     "@types/lodash": "^4.14.80",
+    "@types/mkdirp": "^0.5.1",
     "@types/node": "^8.0.31",
+    "@types/node-static": "^0.7.0",
+    "@types/opn": "^3.0.28",
+    "@types/read": "0.0.28",
     "@types/uuid": "^3.4.2",
     "@types/ws": "^3.2.0",
+    "@types/yargs": "^8.0.2",
     "ajv": "^5.2.3",
+    "axios": "^0.17.0",
     "byline": "^5.0.0",
+    "chalk": "^2.3.0",
     "deepcopy": "^0.6.3",
+    "ignore": "^3.3.7",
     "lodash": "^4.17.4",
+    "mkdirp": "^0.5.1",
+    "node-static": "^0.7.10",
+    "opn": "^5.1.0",
+    "read": "^1.0.7",
     "uuid": "^3.1.0",
-    "ws": "^3.2.0"
+    "ws": "^3.2.0",
+    "yargs": "^10.0.3"
   },
   "devDependencies": {
     "ava": "^0.23.0",

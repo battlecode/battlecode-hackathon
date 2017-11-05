@@ -6,7 +6,7 @@ import * as schema from '../src/schema';
 const TEST_MAP: schema.MapFile = {
     version: 'battlecode 2017 hackathon map',
     teamCount: 10,
-    name: 'test',
+    mapName: 'test',
     width: 3,
     height: 3,
     tiles: [

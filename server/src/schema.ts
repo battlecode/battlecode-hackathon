@@ -63,18 +63,13 @@ export interface SectorData {
 /**
  * The data for the map.
  * 
- * Note: .bch18m files consist of a gzipped MapData JSON object.
+ * Note: map.json files consist of a MapData object serialized to JSON.
  */
 export interface MapFile {
     /**
      * Required sanity check.
      */
     version: "battlecode 2017 hackathon map",
-
-    /**
-     * The name of the map.
-     */
-    name: string;
 
     /**
      * Number of teams required to play the map (not incl. neutral)
@@ -110,6 +105,13 @@ export interface MapFile {
      * The initial entities on the map.
      */
     entities: EntityData[];
+
+    /**
+     * The name of the map.
+     * Note: you don't actually need to write this in a map file, it'll just get overwritten when loaded.
+     */
+    mapName?: string;
+
 }
 
 export interface GameState extends MapFile {
@@ -337,7 +339,11 @@ export interface ListMapsResponse {
     command: "listMapsResponse";
 
     mapNames: string[];
-    maps: MapFile[];
+    /**
+     * Each entry in Maps is a MapFile encoded as JSON.
+     * Woo, recursive encoding!
+     */
+    maps: string[];
 }
 
 export interface ListReplaysRequest {
@@ -347,14 +353,22 @@ export interface ListReplaysRequest {
 export interface ListReplaysResponse {
     command: "listReplaysResponse";
 
-    replayIDs: GameID[];
     replayNames: string[];
-    replayTeams: TeamData[][];
 }
 
 export interface ReplayRequest {
     command: "replayRequest",
-    id: GameID;
+    name: string;
+}
+
+export interface ReplayResponse {
+    command: "replayResponse",
+    name: string;
+
+    /**
+     * A JSON-encoded MatchData.
+     */
+    match: string;
 }
 
 /**
@@ -366,13 +380,12 @@ export interface GameReplay {
 
     // Note: this data is also included in the match data; these fields are provided
     // to make life simpler for the consumer
-
     id: GameID;
     winner?: TeamData;
 
     /**
      * The completed match.
-     * A base64-encoded gzipped MatchData.
+     * A base64-encoded gzipped JSON-encoded MatchData.
      */
     matchData: string;
 }
@@ -387,7 +400,7 @@ export interface SpectateAll {
 
 /**
  * The data for a finished match.
- * Note that .bch18 files consist of a gzipped MatchData JSON object.
+ * Note that .bch17 files consist of a gzipped MatchData JSON object.
  */
 export interface MatchData {
     /**
@@ -413,4 +426,4 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
 export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
     ListReplaysRequest | ReplayRequest;
 export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | ErrorCommand | Keyframe |
-    ListMapsResponse | GameReplay;
+    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse;

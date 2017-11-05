@@ -75,8 +75,6 @@ export const handler = (options) => {
         wsPort: options.wsPort,
         unixSocket: options.unixSocket,
 
-        savePath: '.',
-        mapPath: '.',
         debug: options.debug,
         log: engineLog,
         error: engineError

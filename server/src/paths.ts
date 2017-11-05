@@ -1,14 +1,20 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as mkdirp from 'mkdirp';
 
 export const BATTLEHACK_PATH = path.join(os.homedir(), '.battlehack17');
+export const MAPS = path.join(BATTLEHACK_PATH, 'maps');
+export const REPLAYS = path.join(BATTLEHACK_PATH, 'replays');
+export const CREDENTIALS = path.join(BATTLEHACK_PATH, 'credentials.json');
 
-if (!fs.existsSync(BATTLEHACK_PATH)) {
-    mkdirp.sync(BATTLEHACK_PATH);
+const ensure = (dir) => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir);
+    }
 }
+ensure(BATTLEHACK_PATH);
+ensure(MAPS);
+ensure(REPLAYS);
 
-export const BATTLEHACK_MAPS = path.join(BATTLEHACK_PATH, 'maps');
-export const BATTLEHACK_SAVES = path.join(BATTLEHACK_PATH, 'saves');
-export const BATTLEHACK_CREDENTIALS = path.join(BATTLEHACK_PATH, 'credentials.json');
+// we're in dist/src/
+export const PACKAGED_MAPS = path.join(path.dirname(path.dirname(__dirname)), 'defaultmaps');

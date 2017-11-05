@@ -24,7 +24,6 @@
   "dependencies": {
     "@types/byline": "^4.2.31",
     "@types/lodash": "^4.14.80",
-    "@types/mkdirp": "^0.5.1",
     "@types/node": "^8.0.31",
     "@types/node-static": "^0.7.0",
     "@types/opn": "^3.0.28",
@@ -39,7 +38,6 @@
     "deepcopy": "^0.6.3",
     "ignore": "^3.3.7",
     "lodash": "^4.17.4",
-    "mkdirp": "^0.5.1",
     "node-static": "^0.7.10",
     "opn": "^5.1.0",
     "read": "^1.0.7",

@@ -18,59 +18,39 @@ import {
     TeamData,
     SpectateAll,
     TeamID,
+    ListMapsRequest,
+    ListReplaysRequest,
+    ReplayRequest,
+    ListMapsResponse,
+    ListReplaysResponse,
+    ReplayResponse,
 } from './schema';
 
 import ClientError from './error';
 import { Game } from './game';
 import { Client, ClientID } from './client';
+import * as paths from './paths';
+
 import * as net from 'net';
 import * as http from 'http';
-import * as ws from 'ws';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
-import * as uuid from 'uuid/v4';
+import * as path from 'path';
 import * as fs from 'fs';
+
+import * as ws from 'ws';
+import * as uuid from 'uuid/v4';
 import * as _ from 'lodash';
 import chalk from 'chalk';
-import * as path from 'path';
 
+const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
-const gzip = <(s: string) => Promise<Buffer>>promisify(zlib.gzip);
+const readdir = promisify(fs.readdir);
+const exists = promisify(fs.exists);
+const mkdir = promisify(fs.mkdir);
+const stat = promisify(fs.stat);
 
-const DEFAULT_MAP: MapFile = {
-    version: "battlecode 2017 hackathon map",
-    name: "default",
-    teamCount: 2,
-    height: 12,
-    width: 12,
-    tiles: [
-        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-        ['D','D','G','D','D','D','D','D','D','D','G','D'],
-        ['G','G','D','D','D','D','D','D','D','D','G','D'],
-        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-        ['D','D','D','D','D','G','G','D','D','D','D','D'],
-        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-        ['D','G','D','D','D','D','D','D','D','D','G','G'],
-        ['D','G','D','D','D','D','D','D','D','G','D','D'],
-        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-    ],
-    sectorSize: 2,
-    entities: [
-        {id: 0, type: "statue", location: {x:1,y:0}, teamID: 1, hp: 10},
-        {id: 1, type: "statue", location: {x:10,y:11}, teamID: 2, hp: 10},
-        {id: 2, type: "hedge", location: {x:1,y:2}, teamID: 0, hp: 100},
-        {id: 3, type: "hedge", location: {x:2,y:2}, teamID: 0, hp: 100},
-        {id: 4, type: "hedge", location: {x:3,y:2}, teamID: 0, hp: 100},
-        {id: 5, type: "hedge", location: {x:10,y:9}, teamID: 0, hp: 100},
-        {id: 6, type: "hedge", location: {x:9,y:9}, teamID: 0, hp: 100},
-        {id: 7, type: "hedge", location: {x:8,y:9}, teamID: 0, hp: 100},
-        {id: 8, type: "thrower", location: {x:3,y:3}, teamID: 1, hp: 10},
-        {id: 9, type: "thrower", location: {x:8,y:8}, teamID: 2, hp: 10},
-    ]
-};
+const gzip = <(s: string) => Promise<Buffer>>promisify(zlib.gzip);
 
 /**
  * Represents a game that hasn't started yet.
@@ -366,9 +346,6 @@ export interface ServerOpts {
     wsPort: number;
     unixSocket: string | undefined;
 
-    savePath: string;
-    mapPath: string;
-
     debug: boolean;
 
     log: (string) => void;
@@ -389,13 +366,17 @@ export default class Server {
     log: (s: string) => void;
     error: (s: string) => void;
 
+    mapNames: string[];
+
     constructor(opts: ServerOpts) {
         this.opts = opts;
         this.log = opts.log;
         this.error = opts.error;
     }
 
-    start() {
+    async start() {
+        await this.updateMaps();
+
         this.log(`TCP listening on :${this.opts.tcpPort}`);
         this.tcp = new net.Server((socket: net.Socket) => {
             const client = Client.fromTCP(socket);
@@ -451,40 +432,88 @@ export default class Server {
         });
     }
 
+    async updateMaps() {
+        await this.ensureDefaultMaps();
+        this.mapNames = await readdirRecursive(paths.MAPS, '.json');
+        this.mapNames.sort();
+    }
+
+    async ensureDefaultMaps() {
+        let defaults = await readdirRecursive(paths.PACKAGED_MAPS, '.json');
+        const defaultPath = path.join(paths.MAPS, 'default');
+        if (!await exists(defaultPath)) {
+            await mkdir(defaultPath);
+        }
+ 
+        await Promise.all(defaults.map(async (m) => {
+            let src = path.join(paths.PACKAGED_MAPS, m);
+            let copy = path.join(defaultPath, m);
+            let isCopied = await exists(copy)
+            if (!isCopied) {
+                this.log(`Copying map ${m} to ${copy}`);
+                let contents = await readFile(src);
+                await writeFile(copy, contents);
+            }
+        }));
+    }
+
+    async loadMap(mapName: string): Promise<MapFile> {
+        let mapData = await readFile(path.join(paths.MAPS, mapName));
+
+        // TODO validate
+        let map = <MapFile> JSON.parse(mapData.toString());
+        map.mapName = mapName;
+
+        return map;
+    }
+
     private async saveGame(game: GameRunner) {
         let start = Date.now();
         let contents = await game.makeGzippedMatchData()
         let teamnames = game.game.teams.slice(1).map(t => t.name).join('-')
-        let filename = `${teamnames}-${game.game.initialState.name}-${game.id}.bch18`;
-        let filepath = path.join(this.opts.savePath, filename);
+
+        // map name may include slashes
+        let sanitizedMapName = <string>game.game.initialState.mapName;
+        sanitizedMapName = sanitizedMapName.replace('/', '-').slice(0, sanitizedMapName.length - '.json'.length);
+
+        let filename = `${teamnames}-${sanitizedMapName}-${game.id}.bch18`;
+
+        let filepath = path.join(paths.REPLAYS, filename);
         await writeFile(filepath, contents);
         let end = Date.now();
         this.log(`Wrote ${filename} in ${Math.ceil(end - start)} ms`);
         return undefined;
     }
 
-    private findPickupGame(): GameID {
+    private pickupLock = new Mutex();
+    private async findPickupGame(): Promise<GameID> {
+        // note: we need to mutex this code so that multiple games aren't
+        // started at the same time
+        let lock = await this.pickupLock.acquire();
+
         for (let [id, runner] of this.games.entries()) {
-            if (runner instanceof Lobby) {
+            if (runner instanceof Lobby && runner.isPickup) {
                 return id;
             }
         }
+        
         let pickup = new Lobby(
             uuid(),
             {
                 command: "createGame",
-                map: DEFAULT_MAP,
+                map: await this.loadMap(this.mapNames[Math.floor(Math.random() * this.mapNames.length)]),
                 sendReplay: false
             },
             this.spectators,
             this.opts.debug
         );
         this.games.set(pickup.id, pickup);
-        this.log(`Created pickup game ${prettyID(pickup.id)} on map ${pickup.map.name}`);
+        this.log(`Created pickup game ${prettyID(pickup.id)} on map ${pickup.map.mapName}`);
+        lock.release();
         return pickup.id;
     }
 
-    handleCommand = async (command: IncomingCommand, client: Client) => {
+    private handleCommand = async (command: IncomingCommand, client: Client) => {
         try {
             switch (command.command) {
             case "login":
@@ -499,12 +528,21 @@ export default class Server {
             case "createGame":
                 await this.handleCreateGame(command, client);
                 break;
+            case "listMapsRequest":
+                await this.handleListMapsRequest(command, client);
+                break;
+            case "listReplaysRequest":
+                await this.handleListReplaysRequest(command, client);
+                break;
+            case "replayRequest":
+                await this.handleReplayRequest(command, client);
+                break;
             default:
                 client.send({
                     command: "error",
-                    reason: "unimplemented command: "+command.command
+                    reason: "unimplemented command: "+(<any>command).command
                 })
-                this.error("unimplemented command: "+command.command);
+                this.error("unimplemented command: "+(<any>command).command);
             }
         } catch (e) {
             if (e instanceof ClientError) {
@@ -513,7 +551,7 @@ export default class Server {
                     command: "error",
                     reason: e.message
                 });
-                this.error(`E`)
+                this.error(`Error from client ${prettyID(client.id)}: ${e.message}`)
             } else if (e instanceof Error) {
                 // our fault
                 client.send({
@@ -532,7 +570,7 @@ export default class Server {
         }
     }
 
-    handleClose = async (client: Client) => {
+    private handleClose = async (client: Client) => {
         this.log(`Client disconnected: ${prettyID(client.id)}`)
         for (let game of this.games.values()) {
             let broken = game.deleteClient(client.id);
@@ -549,19 +587,19 @@ export default class Server {
         }
     };
 
-    handleLogin = async (login: Login, client: Client) => {
-        let gameID;
+    private handleLogin = async (login: Login, client: Client) => {
+        let gameID: GameID;
         if (login.gameID) {
             gameID = login.gameID;
         } else {
-            gameID = this.findPickupGame();
+            gameID = await this.findPickupGame();
         }
         const game = this.games.get(gameID);
         if (game === undefined) {
-            throw new ClientError(`No such game: ${prettyID(login.gameID)}`);
+            throw new ClientError(`No such game: ${login.gameID}`);
         }
         if (game instanceof GameRunner) {
-            throw new ClientError(`Name already running: ${prettyID(login.gameID)}`);
+            throw new ClientError(`Name already running: ${login.gameID}`);
         } 
         let runner = game.login(login, client);
         this.playing.set(client.id, game.id);
@@ -575,7 +613,7 @@ export default class Server {
         }
     }
 
-    handleMakeTurn = async (makeTurn: MakeTurn, client: Client) => {
+    private handleMakeTurn = async (makeTurn: MakeTurn, client: Client) => {
         let gameID = this.playing.get(client.id);
         if (gameID === undefined) {
             throw new ClientError("Client not playing a game");
@@ -606,7 +644,7 @@ export default class Server {
         }
     }
 
-    handleSpectateAll = async (spectateAll: SpectateAll, client: Client) => {
+    private handleSpectateAll = async (spectateAll: SpectateAll, client: Client) => {
         this.log(`Client ${prettyID(client.id)} registered as spectator`);
         this.spectators.push(client);
         for (let game of this.games.values()) {
@@ -616,9 +654,93 @@ export default class Server {
         }
     }
 
-    handleCreateGame = async (createGame: CreateGame, client: Client) => {
+    private handleCreateGame = async (createGame: CreateGame, client: Client) => {
         let lobby = new Lobby(uuid(), createGame, this.spectators, this.opts.debug, client);
         this.games.set(lobby.id, lobby);
-        this.log(`Created ${lobby.isPickup? 'pickup ':''}game ${prettyID(lobby.id)} on map ${lobby.map.name}`);
+        this.log(`Created ${lobby.isPickup? 'pickup ':''}game ${prettyID(lobby.id)} on map ${lobby.map.mapName}`);
+    }
+
+    private handleListMapsRequest = async (listMaps: ListMapsRequest, client: Client) => {
+        await this.updateMaps();
+
+        let maps = await Promise.all(this.mapNames.map(async (mapName) => {
+            let buffer = await readFile(path.join(paths.MAPS, mapName));
+            return buffer.toString();
+        }));
+
+        let response: ListMapsResponse = {
+            command: "listMapsResponse",
+            mapNames: this.mapNames,
+            maps: maps
+        }
+        client.send(response);
+    }
+
+    private handleListReplaysRequest = async (listReplaysRequest: ListReplaysRequest, client: Client) => {
+        let replayNames = await readdirRecursive(paths.REPLAYS, '.bch18');
+        replayNames.sort();
+
+        let response: ListReplaysResponse = {
+            command: "listReplaysResponse",
+            replayNames: replayNames,
+        }
+        client.send(response);
+    }
+
+    private handleReplayRequest = async (replayRequest: ReplayRequest, client: Client) => {
+        let buf = await readFile(path.join(paths.REPLAYS, replayRequest.name));
+
+        let response: ReplayResponse = {
+            command: "replayResponse",
+            name: replayRequest.name,
+            match: buf.toString()
+        }
+        client.send(response);
+    }
+}
+
+const readdirRecursive = async (topRoot: string, extension: string): Promise<string[]> => {
+    let paths = new Array<string>();
+    let stack = new Array<[string, Promise<string[]>]>();
+
+    stack.push([topRoot, readdir(topRoot)]);
+
+    while (stack.length > 0) {
+        let next = stack.pop();
+        if (next === undefined) continue;
+
+        let [root, filesp] = next;
+
+        let files = await filesp;
+        files = files.map(f => path.join(root, f));
+
+        let stats = await Promise.all(files.map(f => stat(f)));
+
+        for (let i = 0; i < files.length; i++) {
+            if (stats[i].isDirectory()) {
+                stack.push([files[i], readdir(files[i])]);
+            } else if (files[i].endsWith(extension)) {
+                paths.push(path.relative(topRoot, files[i]));
+            }
+        }
+    }
+
+    paths.sort();
+    return paths;
+}
+
+/**
+ * lol
+ */
+class Mutex {
+    private lock: boolean = false;
+    async acquire(): Promise<{release: () => void}> {
+        while (this.lock) {
+            await new Promise(r => setTimeout(r, 5));
+        }
+        this.lock = true;
+        return {
+            release: () => this.lock = false
+        }
     }
 }

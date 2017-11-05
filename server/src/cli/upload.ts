@@ -48,7 +48,7 @@ interface Credentials {
 
 const getCredentials = async (server): Promise<Credentials> => {
     while (true) {
-        if (!fs.existsSync(paths.BATTLEHACK_CREDENTIALS)) {
+        if (!fs.existsSync(paths.CREDENTIALS)) {
             /**
              * This is fairly insecure. However, we store credentials in the filesystem anyway,
              * so...
@@ -73,10 +73,10 @@ const getCredentials = async (server): Promise<Credentials> => {
                 token: token,
                 expires: Math.floor(Date.now() / 1000) + expires_in
             }
-            fs.writeFileSync(paths.BATTLEHACK_CREDENTIALS, JSON.stringify(outCreds, undefined, 2));
+            fs.writeFileSync(paths.CREDENTIALS, JSON.stringify(outCreds, undefined, 2));
             return outCreds;
         } else {
-            let result = JSON.parse(fs.readFileSync(paths.BATTLEHACK_CREDENTIALS).toString());
+            let result = JSON.parse(fs.readFileSync(paths.CREDENTIALS).toString());
             let {token, expires} = result;
 
             // if we're expired, get new tokens (+ 60 seconds of leeway)

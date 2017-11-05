@@ -37,6 +37,8 @@ export default class Renderer {
 
     map: schema.GameState;
 
+    angle: number;
+
     constructor(start: schema.GameStart) {
         this.gameID = start.gameID;
         this.teamColors = makeColors(start.teams);
@@ -78,12 +80,12 @@ export default class Renderer {
         // we want it mostly above with a slight offset for pretty
         directional.castShadow = true;
         directional.position.x = -1;
-        directional.position.y = -1;
-        directional.position.z = 1;
-        directional.shadow.camera.left = -mapD;
-        directional.shadow.camera.right = mapD;
-        directional.shadow.camera.top = mapD;
-        directional.shadow.camera.bottom = -mapD;
+        directional.position.y = -.4;
+        directional.position.z = 1.1;
+        directional.shadow.camera.left = -mapD-2;
+        directional.shadow.camera.right = mapD+2;
+        directional.shadow.camera.top = mapD+2;
+        directional.shadow.camera.bottom = -mapD-2;
         this.scene.add(directional);
 
         const aspect = window.innerWidth / window.innerHeight;
@@ -97,7 +99,37 @@ export default class Renderer {
 
         this.isometric = new THREE.OrthographicCamera(- mapD * aspect, mapD * aspect, mapD, - mapD, -200, 200);
 
-        this.setMouse(0,0);
+        this.setAngle(0);
+        this.setupMouse();
+    }
+
+    mouseRotating: boolean = false;
+    mouseRotateStartX?: number;
+    mouseRotateStartY?: number;
+    mouseRotateStartAngle?: number;
+    setupMouse() {
+        this.domElement.onmousedown = (e) => {
+            if (e.button === 1 || e.button === 2) {
+                this.mouseRotating = true;
+                this.mouseRotateStartX = e.offsetX;
+                this.mouseRotateStartY = e.offsetY;
+                this.mouseRotateStartAngle = this.angle;
+            }
+        };
+        this.domElement.onmousemove = (e) => {
+            if (this.mouseRotating) {
+                this.setAngle(<number>this.mouseRotateStartAngle +
+                       (e.offsetX - <number>this.mouseRotateStartX) / 100);
+            }
+        }
+        this.domElement.onmouseup = (e) => {
+            if (this.mouseRotating) {
+                this.mouseRotating = false;
+                this.mouseRotateStartX = undefined;
+                this.mouseRotateStartY = undefined;
+                this.mouseRotateStartAngle = undefined;
+            }
+        }
     }
 
     update(update: schema.NextTurn) {
@@ -112,10 +144,11 @@ export default class Renderer {
         }
     }
 
-    setMouse(mouseX: number, mouseY: number) {
+    setAngle(angle: number) {
+        this.angle = angle;
         const out = 3;
-        this.isometric.position.set((this.map.width / 2 - .5) + Math.cos(mouseX / 100) * out,
-                                    (this.map.height / 2 - .5) + Math.sin(mouseX / 100) * out,
+        this.isometric.position.set((this.map.width / 2 - .5) + Math.cos(angle) * out,
+                                    (this.map.height / 2 - .5) + Math.sin(angle) * out,
                                     out);
         this.isometric.lookAt(new THREE.Vector3(this.map.width / 2 - .5, this.map.height / 2 - .5, 0));
     }
@@ -156,22 +189,30 @@ class Entities {
     addOrUpdateEntity(data: schema.EntityData) {
         let mesh = this.entities[data.id];
         if (!mesh) {
-            let height = data.type == 'thrower'? 
-                1 : (data.type == 'hedge'? 1.2 : 2);
-            const geometry = new BoxGeometry(1,1,height, 1,1,1);
-            const material = this.teamMaterials[data.teamID];
-            mesh = new Mesh(geometry, material);
+            if (data.type === 'thrower') {
+                const geometry = new BoxGeometry(.75,.75,.75, 1,1,1);
+                const material = this.teamMaterials[data.teamID];
+                mesh = new Mesh(geometry, material);
+                mesh.userData.height = .75;
+            } else if (data.type === 'statue') {
+                const geometry = new BoxGeometry(.75,.75,2, 1,1,1);
+                const material = this.teamMaterials[data.teamID];
+                mesh = new Mesh(geometry, material);
+                mesh.userData.height = 2;
+            } else { // if (data.type === 'hedge') {
+                const geometry = new BoxGeometry(1,1,1.2, 1,1,1);
+                const material = this.teamMaterials[data.teamID];
+                mesh = new Mesh(geometry, material);
+                mesh.userData.height = 1.2;
+            }
             mesh.castShadow = true;
             mesh.userData.entityId = data.id;
-            mesh.userData.height = height;
 
             this.entities[data.id] = mesh;
             this.scene.add(mesh);
         }
         if (data.heldBy !== undefined) {
-            // TODO add holder height to held height
-            // needs actual entity data structure
-            mesh.position.z = 1.6;
+            mesh.position.z = .75 + .1 + mesh.userData.height / 2;
         } else {
             mesh.position.z = mesh.userData.height / 2;
         }
@@ -195,7 +236,7 @@ class Entities {
  */
 const makeColors = (teams: schema.TeamData[]) => {
     // TODO: handle additional teams
-    return [0x888888, 0xee0000, 0x0000ff];
+    return [0x00a31d, 0xee0000, 0x0000ff];
 }
 
 /**

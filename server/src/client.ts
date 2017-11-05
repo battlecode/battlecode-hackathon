@@ -72,7 +72,6 @@ export class Client {
         let errorCb = (err: Error) => {
             console.log("error with client "+this.id);
             if (err) {
-                console.log(err.message);
                 console.log(err.stack);
             } else {
                 console.log("???")

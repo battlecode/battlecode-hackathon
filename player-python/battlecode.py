@@ -623,8 +623,8 @@ class State(object):
 
         self.map = Map(
             self,
-            initialState['width'],
             initialState['height'],
+            initialState['width'],
             initialState['tiles'],
             initialState['sectorSize']
         )
@@ -865,7 +865,6 @@ class Game(object):
                 return
 
     def _submit_turn(self):
-        print( self.state._action_queue)
         self._send({
             'command': 'makeTurn',
             'turn': self.state.turn,

@@ -20,3 +20,9 @@ declare module 'stats.js' {
     const Stats: any;
     export default Stats;
 }
+
+declare namespace JSX {
+    interface Element { }
+    interface IntrinsicElements { div: any; }
+  }
+  

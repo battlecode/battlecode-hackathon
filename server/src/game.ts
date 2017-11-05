@@ -41,9 +41,9 @@ const DAMAGES = {
  * This is because throwing errors is quite slow and users may submit hundreds
  * of erroneous actions.
  * Instead of throwing, return a FastError. To get a value out of a fast error, do:
- * 
+ *
  *      if (typeof val === 'string') return val;
- * 
+ *
  * and then use val like normal. Note that you *have to do the check* otherwise the error
  * may be missed. Sorry, it's kinda ugly :/
  */
@@ -100,7 +100,7 @@ export class Game {
 
     /**
      * Returns the first turn of the match.
-     * 
+     *
      * firstTurn may throw an Error or ClientError, which should
      * be given to the user as a schema.ErrorCommand.
      */
@@ -117,12 +117,13 @@ export class Game {
     /**
      * Performs a list of actions on behalf of a team and returns
      * the result of those actions.
-     * 
+     *
      * makeTurn may throw an Error or ClientError, which should
      * be given to the user as a schema.ErrorCommand.
      */
     makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
         // player will send the last turn id they received
+
         if (turn !== this.turn + 1) {
             throw new ClientError("wrong turn: given: "+turn+", should be: "+this.turn + 1);
         }
@@ -172,7 +173,7 @@ export class Game {
                 }
             }
         }
- 
+
         diff.changedSectors = this.getChangedSectors();
         diff.dead = this.getDeadEntities();
 
@@ -225,7 +226,7 @@ export class Game {
 
     /**
      * returns Sector based on location
-     */  
+     */
     private getSector(location: Location): FastError<Sector> {
         var x = location.x - location.x % this.map.sectorSize;
         var y = location.y - location.y % this.map.sectorSize;
@@ -253,7 +254,7 @@ export class Game {
         if (this.entities.has(entData.id)) {
             return "already exists: "+entData.id;
         }
-        
+
         if (entData.type === "statue") {
             var sector = this.getSector(entData.location);
             if (typeof sector === "string") return sector;
@@ -284,9 +285,9 @@ export class Game {
                 this.occupied.set(held.location.x, held.location.y, held.id);
             }
 
-            // Statues do not move 
+            // Statues do not move
             if (entity.type === "statue") {
-                var sector = this.getSector(entity.location); 
+                var sector = this.getSector(entity.location);
                 if (typeof sector === 'string') return sector;
                 sector.deleteStatue(entity);
             }
@@ -337,7 +338,7 @@ export class Game {
             var statueID = sector.getSpawningStatueID();
             if (statueID === undefined) continue;
 
-            // if statue exists in game  
+            // if statue exists in game
             let statue = this.getEntity(statueID);
             if (typeof statue === 'string') throw new Error(statue);
 
@@ -426,31 +427,33 @@ export class Game {
             return "Not enough room to throw; must have at least one space free in direction of throwing: "
                 + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
-        
+
         // held entity always lands 1 space before target location
         for (var spacesThrown = 0; spacesThrown <= 7; spacesThrown++) {
             if (isOutOfBound(targetLoc, this.map) || this.occupied.get(targetLoc.x, targetLoc.y)) { break };
             targetLoc.x += action.dx;
             targetLoc.y += action.dy;
         }
-        
+
         // if targetLoc is out of bounds, then target does not exist
-        var targetId = this.occupied.get(targetLoc.x, targetLoc.y);
-        var target;
-        if (targetId) {
-            target = this.getEntity(targetId);
-        }
-        if (target) {
-            // Target may or may not be destroyed
-            if (target.type === "thrower") {
-                let err = this.dealDamage(target.id, DAMAGES.thrower);
-                if (typeof err === "string") return err;
-            } else if (target.type === "statue") {
-                let err = this.dealDamage(target.id, DAMAGES.statue);
+        if(!isOutOfBound(targetLoc,this.map)){
+            var targetId = this.occupied.get(targetLoc.x, targetLoc.y);
+            var target;
+            if (targetId) {
+                target = this.getEntity(targetId);
+            }
+            if (target) {
+                // Target may or may not be destroyed
+                if (target.type === "thrower") {
+                    let err = this.dealDamage(target.id, DAMAGES.thrower);
+                    if (typeof err === "string") return err;
+                } else if (target.type === "statue") {
+                    let err = this.dealDamage(target.id, DAMAGES.statue);
+                    if (typeof err === "string") return err;
+                }
+                let err = this.dealDamage(held.id, DAMAGES.recoil);
                 if (typeof err === "string") return err;
             }
-            let err = this.dealDamage(held.id, DAMAGES.recoil);
-            if (typeof err === "string") return err;
         }
         var landloc: Location = {
             x: targetLoc.x - action.dx,
@@ -459,10 +462,12 @@ export class Game {
         held.location.x = landloc.x;
         held.location.y = landloc.y;
         held.heldBy = undefined;
-        // damage held unit if unit lands on dirt 
+        // damage held unit if unit lands on dirt
         if (this.getTile(landloc) === "D") {
             this.dealDamage(held.id, DAMAGES.dirt);
         }
+        if(held.hp >0)
+            this.occupied.set(held.location.x, held.location.y, held.id);
         entity.holding = undefined;
         entity.holdingEnd = undefined;
     }
@@ -494,7 +499,7 @@ export class Game {
         }
         return;
     }
- 
+
     private doAction(team: TeamID, action: Action): FastError {
         var entity = this.getEntity(action.id);
         if (typeof entity === 'string') return entity;
@@ -636,7 +641,7 @@ export class Game {
                     assert(unwrap(this.getSector(entity.location)).topLeft.x === tl.x, `entity in wrong sector`);
                     assert(unwrap(this.getSector(entity.location)).topLeft.y === tl.y, `entity in wrong sector`);
                 }
-            } 
+            }
         }
         if (failures.length > 0) {
             console.log("FAILURES:")

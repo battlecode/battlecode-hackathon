@@ -26,6 +26,11 @@ STATUE = 'statue'
 GRASS = 'G'
 DIRT = 'D'
 
+THROW_RANGE = 7
+THROW_ENTITY_DAMAGE = 4
+THROW_ENTITY_RECOIL = 2
+THROW_ENTITY_DIRT = 1
+
 # terminal formatting
 _TERM_RED = '\033[31m'
 _TERM_END = '\033[0m'
@@ -102,6 +107,7 @@ class Entity(object):
         self.holding_end = None
         self.held_by = None
         self.holding = None
+        self.disintegrated = False
 
     def __str__(self):
         contents = '<id:{},type:{},team:{},location:{}'.format(
@@ -141,7 +147,7 @@ class Entity(object):
 
     def _update(self, data):
         if self.location in self._state.map._occupied and \
-            self._state.map._occupied[self.location] == self.id:
+            self._state.map._occupied[self.location].id == self.id:
             del self._state.map._occupied[self.location]
 
         if __debug__:
@@ -172,7 +178,7 @@ class Entity(object):
             self.held_by = self._state.entities[data['heldBy']]
         else:
             self.held_by = None
-            self._state.map._occupied[self.location] = self.id
+            self._state.map._occupied[self.location] = self
 
         if 'holding' in data:
             self.holding = self._state.entities[data['holding']]
@@ -215,7 +221,8 @@ class Entity(object):
     def can_act(self):
         ''' Returns true if this is a robot with no cooldown. If either is
         false then this entity cannot perform any actions this turn.'''
-        return self.cooldown == 0 and self.is_robot and self.held_by is None
+        return self.cooldown == 0 and self.is_robot and (self.held_by is None) and \
+                not self.disintegrated
 
     @property
     def can_be_picked(self):
@@ -226,9 +233,20 @@ class Entity(object):
         return self.is_robot and not self.is_holding and not self.is_held
 
 
-    @property
-    def can_throw(self):
-        return self.is_holding
+    def can_throw(self, direction):
+        if not self.is_holding or not self.can_act:
+            return
+
+        held = self.holding
+        initial = self.location
+        target_loc = Location(initial.x+direction.dx, \
+                initial.y+direction.dy)
+        on_map = self._state.map.location_on_map(target_loc)
+        is_occupied = target_loc in self._state.map._occupied
+
+        if ((not on_map) or is_occupied):
+            return False
+        return True
 
     def can_move(self, direction):
         ''' Returns true if the robot can move in a given direction. False
@@ -239,11 +257,12 @@ class Entity(object):
 
         location = self.location.adjacent_location_in_direction(direction)
         on_map = self._state.map.location_on_map(location)
-        entity = self._state.entity_at_location(location)
-        occupied = location in self._state.map._occupied
+        is_occupied = location in self._state.map._occupied
 
-        if ((not on_map) or (entity is not None) or occupied):
+
+        if ((not on_map) or is_occupied):
             return False
+
         return True
 
     def can_build(self, direction):
@@ -267,7 +286,8 @@ class Entity(object):
             return False
 
         distance_to = self.location.distance_to_squared(entity.location)
-        if entity == None or not entity.can_be_picked or not distance_to <=2:
+        if entity == None or not entity.can_be_picked or not distance_to <=2 or \
+            entity.disintegrated:
             return False
         else:
             return True
@@ -292,7 +312,7 @@ class Entity(object):
             if self.can_move(direction):
                 del self._state.map._occupied[self.location]
                 self.location = self.location.adjacent_location_in_direction(direction)
-                self._state.map._occupied[self.location] = self.id
+                self._state.map._occupied[self.location] = self
                 self.cooldown_end = self._state.turn + 1
 
     def queue_build(self, direction):
@@ -314,7 +334,7 @@ class Entity(object):
         if self._state.speculate:
             if self.can_build(direction):
                 self.cooldown_end = self._state.turn + 10
-                # self._state._build_statue(location)
+                self._state._build_statue(location)
 
 
 
@@ -328,6 +348,24 @@ class Entity(object):
 
         self.queue_move(direction)
 
+    def _deal_damage(self, damage):
+        if self.disintegrated:
+            return
+
+        self.hp -= damage
+        if(self.hp >0):
+            return
+
+        if self.held_by == None:
+            del self._state.map._occupied[self.location]
+
+        if self.holding != None:
+            self.holding.held_by = None
+            self._state.map._occupied[self.location] = self.holding
+
+        self.disintegrated = True
+        del self._state.entities[self.id]
+
     def queue_disintegrate(self):
         '''Queues a disintegration, so that this object will disintegrate in the next turn.'''
         self._state._queue({
@@ -336,15 +374,15 @@ class Entity(object):
         })
 
         if self._state.speculate:
-            # Remove from entities
-            del self._state.map._occupied[self.location]
-            #TODO make sure nothing is held and if so update
+            self._deal_damage(self.hp+1)
+
 
     def queue_throw(self, direction):
         '''Queues a move, so that this object will throw held object one square
         in given direction in the next turn.'''
         if __debug__:
             assert self.holding != None, "Not Holding anything"
+            assert self.can_throw(direction), "Not Enough space to throw"
 
         self._state._queue({
             'action': 'throw',
@@ -352,6 +390,45 @@ class Entity(object):
             'dx': direction.dx,
             'dy': direction.dy
         })
+
+        if self._state.speculate:
+            if not self.can_throw(direction):
+                return
+
+            held = self.holding
+            self.holding = None
+            self.holding_end = None
+            initial = self.location
+            target_loc = Location(initial.x+direction.dx, \
+                    initial.y+direction.dy)
+
+            for i in range(THROW_RANGE):
+                on_map = self._state.map.location_on_map(target_loc)
+                is_occupied = target_loc in self._state.map._occupied
+
+                if ((not on_map) or is_occupied):
+                    break
+
+                target_loc = Location(target_loc.x + direction.dx, \
+                        target_loc.y + direction.dy)
+
+            target = self._state.map._occupied.get(target_loc, None)
+            if(target != None):
+                target._deal_damage(THROW_ENTITY_DAMAGE)
+                held._deal_damage(THROW_ENTITY_RECOIL)
+
+            landing_location = Location(target_loc.x - direction.dx, \
+                                        target_loc.y - direction.dy)
+            held.location = landing_location
+            if self._state.map.tile_at(landing_location)  == DIRT:
+                held._deal_damage(THROW_ENTITY_DIRT)
+            if not held.disintegrated:
+                self._state.map._occupied[landing_location] = held
+            held.held_by = None
+
+            self.cooldown_end = self._state.turn + 10
+
+
 
     def queue_pickup(self, entity):
         if __debug__:
@@ -372,9 +449,21 @@ class Entity(object):
                 self.holding_end = self._state.turn + 10
                 self.cooldown_end = self._state.turn + 10
 
-    def entities_within_distance(self, distance, include_held=False):
+    def entities_within_distance(self, distance, include_held=False,
+            iterator=None):
         '''Entities within a certain distance'''
-        for entity in self._state.entities.values():
+        if iterator != None:
+            for entity in iterator:
+                if entity is self:
+                    continue
+                if not include_held and entity.held_by is not None:
+                    continue
+                if self.location.distance_to(entity.location) < distance:
+                    yield entity
+
+            return
+
+        for entity in self._state.get_entities():
             if entity is self:
                 continue
             if not include_held and entity.held_by is not None:
@@ -384,7 +473,6 @@ class Entity(object):
 
     '''Entities within a certain distance squared.'''
     def entities_within_distance_squared(self, distance):
-        #TODO actually implement this fully
         return self.entities_within_distance(distance**2)
 
 class Location(tuple):
@@ -552,9 +640,6 @@ class State(object):
 
         self._action_queue = []
 
-        for entity in self.entities.values():
-            self.entities_by_location[entity.location] = entity
-
         self._update_entities(initialState['entities'])
         self.map._update_sectors(initialState['sectors'])
 
@@ -568,13 +653,6 @@ class State(object):
     def turn_next_spawn(self):
         return ((self.turn-1)//10+1)*10
 
-    def entity_at_location(self, location):
-        ''' Returns the entitiy at a given location'''
-        return self.entities_by_location.get(location, None)
-
-    def is_location_occupied(self, location):
-        ''' Return true if there is an entity at given location'''
-        return (self.entity_at_location(location)!=None)
 
     def _queue(self, action):
         self._game._queue(action)
@@ -629,6 +707,23 @@ class State(object):
                 (self.map._sectors[top_left] == altstate.map._sectors[top_left])
 
         self._validate()
+
+
+    def get_entities(self, entity_id=-1,entity_type=None,location=None,
+            team=None):
+        for i in range(self.max_id+1):
+            entity = self.entities.get(i)
+            if entity == None:
+                continue
+            if entity_id != -1 and entity.id != entity_id:
+                continue
+            if entity_type != None and entity.type != entity_type:
+                continue
+            if location != None and entity.location != location:
+                continue
+            if team != None and entity.team != team:
+                continue
+            yield entity
 
 if os.name == 'nt':
     DEFAULT_SERVER = ('localhost', 6147)

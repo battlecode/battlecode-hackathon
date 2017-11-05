@@ -9,41 +9,28 @@ rounds = 0
 start = time.clock()
 
 for state in game.turns():
-    for entity in state.entities.values():
+    for entity in state.get_entities(team=state.my_team):
         if entity.team != state.my_team or not entity.can_act:
             continue
         my_location = entity.location
         near_entites = entity.entities_within_distance_squared(2)
         near_entites = list(filter(lambda x: x.can_be_picked, near_entites))
 
-        if random.randrange(0,10) == 0:
-            directions = list(battlecode.Direction.all())
-            direction = directions[random.randrange(0, len(directions))]
-            if entity.can_build(direction):
-                entity.queue_build(direction)
+        for pickup_entity in near_entites:
+            if entity.can_pickup(pickup_entity):
+                entity.queue_pickup(pickup_entity)
 
-        if len(near_entites)>0:
-            index = random.randrange(0, len(near_entites))
-            other_entity = near_entites[index]
+        for direction in battlecode.Direction.all():
+            if entity.can_throw(direction):
+                entity.queue_throw(direction)
+            break
 
-            if(entity.can_pickup(other_entity)):
-                entity.queue_pickup(other_entity)
+        for direction in battlecode.Direction.all():
+            if entity.can_move(direction):
+                entity.queue_move(direction)
 
-        near_entites = list(entity.entities_within_distance(5))
-        if len(near_entites)>2:
-            index = random.randrange(0, len(near_entites))
-            if near_entites[index].location == entity.location:
-                continue
-            direction_to = entity.location.direction_to(near_entites[index].location)
-            if entity.can_move(direction_to):
-                entity.queue_move(direction_to)
-        else:
-            direction_to = \
-                entity.location.direction_to(battlecode.Location(0,0))
-            if entity.can_move(direction_to):
-                entity.queue_move(direction_to)
-        
-    print(state.turn, len(state.entities))
+
+
 
 end = time.clock()
 print('clock time: '+str(end - start))

@@ -150,5 +150,6 @@ const validateIncoming = (command: string | Buffer) => {
     const commandS = typeof(command) === 'string' ?
       command : command.toString();
 
+
     return JSON.parse(commandS) as IncomingCommand;
 };

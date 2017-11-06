@@ -19,7 +19,7 @@ export class Minimap extends Component<{gameState: state.State}, {}> {
         return <canvas height={height}
                        width={width}
                        className='pixelated'
-                       style={`width: ${width}px; height: ${height}px; display: block;`}
+                       style={`width: ${width*4}px; height: ${height*4}px; display: block;`}
                        ref={(e) => this.canvas = e}></canvas>
     }
 
@@ -39,6 +39,17 @@ export class Minimap extends Component<{gameState: state.State}, {}> {
         for (let ent of this.props.gameState.entities) {
             if (ent === undefined) continue;
             setColor(this.image.data, width, height, ent.location.x, ent.location.y, TEAM_COLORS[ent.teamID]);
+        }
+        // flip the image along the y axis
+        let d = this.image.data;
+        for (let y = 0; y < Math.floor(height / 2); y++) {
+            let a = y * width * 4;
+            let b = (height - y - 1) * width * 4;
+            for (let i = 0; i < width * 4; i++) {
+                let tmp = d[a+i];
+                d[a+i] = d[b+i];
+                d[b+i] = tmp;
+            }
         }
         this.ctx.putImageData(this.image, 0, 0);
     }

@@ -57,9 +57,14 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
                     this.state.mouseRotateStartY = e.offsetY;
                     this.state.mouseRotateStartAngle = this.state.renderer.angle;
                     this.redraw();
+                } else if (e.button === 0) {
+                    this.state.renderer.setCamera(this.state.renderer.cameraName === 'isometric' ?
+                        'topDown' : 'isometric');
+                    this.redraw();
                 }
             }}
             onmousemove={(e) => {
+                this.state.renderer.setMouse(e.clientX, e.clientY);
                 if (this.state.mouseRotating) {
                     this.state.renderer.setAngle(this.state.mouseRotateStartAngle as number +
                         (e.offsetX - (this.state.mouseRotateStartX as number)) / 100);
@@ -173,11 +178,13 @@ export class Renderer {
         this.directional.shadow.camera.right = mapD+2;
         this.directional.shadow.camera.top = mapD+2;
         this.directional.shadow.camera.bottom = -mapD-2;
+        this.directional.shadow.mapSize.height = 1024;
+        this.directional.shadow.mapSize.width = 1024;
         this.scene.add(this.directional);
 
-        this.setAngle(0);
+        this.setAngle(5 * Math.PI / 4);
 
-        this.setCamera('topDown');
+        this.setCamera('isometric');
 
         this.redraw();
     }
@@ -211,7 +218,7 @@ export class Renderer {
         return this.renderer.domElement;
     }
 
-    update = (state: state.State) => {
+    update(state: state.State) {
         if (state.gameID !== this.gameID) {
             return;
         }
@@ -243,6 +250,29 @@ export class Renderer {
         this.isometric.lookAt(new THREE.Vector3(this.map.width / 2 - .5, this.map.height / 2 - .5, 0));
     }
 
+    raycaster = new THREE.Raycaster();
+    setMouse(mouseX: number, mouseY: number) {
+        // normalize location to what three expects
+        let mouse = {
+            x: ( mouseX / window.innerWidth ) * 2 - 1,
+            y: - ( mouseY / window.innerHeight ) * 2 + 1
+        };
+
+        this.raycaster.setFromCamera(mouse, this.activeCamera);
+
+        let isxts = this.raycaster.intersectObjects(this.scene.children);
+        isxts = isxts.filter(i => i.object.userData.entityID !== undefined);
+        let changed;
+        if (isxts.length > 0) {
+            changed = this.entities.outlineEntity(this.currentState.entities[isxts[0].object.userData.entityID]);
+        } else {
+            changed = this.entities.outlineEntity(undefined);
+        }
+        if (changed) {
+            this.redraw();
+        }
+    }
+
     redraw = frameDebounce(() => {
         this.beforeRender();
         this.renderer.render(this.scene, this.activeCamera);
@@ -260,14 +290,40 @@ class Entities {
      */
     entities: (Mesh | undefined)[];
     teamMaterials: MeshLambertMaterial[];
+    statueMaterials: MeshLambertMaterial[];
+    geometries: {[type: string]: THREE.BufferGeometry};
+    outlineMaterial: THREE.LineBasicMaterial;
+    outlines: {[type: string]: THREE.Line};
+    activeOutline?: THREE.Line;
 
     constructor(scene: Scene) {
         this.scene = scene;
         this.entities = [];
         this.teamMaterials = [];
+        this.statueMaterials = [];
         for (let color of TEAM_COLORS) {
             this.teamMaterials.push(new MeshLambertMaterial({ color: color }));
+            this.statueMaterials.push(new MeshLambertMaterial({ color: color, transparent: true, opacity: 0.7 }));
         }
+        this.geometries = {
+            thrower: new THREE.BoxBufferGeometry(.75,.75,.75, 1,1,1).translate(0,0, .75/2),
+            statue: new THREE.BoxBufferGeometry(.75,.75,2, 1,1,1).translate(0, 0, 2/2),
+            hedge: new THREE.BoxBufferGeometry(1,1,1.2, 1,1,1).translate(0,0,1.2/2)
+        }
+
+        // can you guess how outlines work?
+        this.outlineMaterial = new THREE.LineBasicMaterial({
+            color: 0xffffff
+        });
+        this.outlines = {
+            thrower: new THREE.Line(new THREE.EdgesGeometry(this.geometries.thrower, .01), this.outlineMaterial),
+            statue: new THREE.Line(new THREE.EdgesGeometry(this.geometries.statue, .01), this.outlineMaterial),
+            hedge: new THREE.Line(new THREE.EdgesGeometry(this.geometries.hedge, .01), this.outlineMaterial)
+        };
+        this.outlines.thrower.scale.multiplyScalar(1.02);
+        this.outlines.statue.scale.multiplyScalar(1.02);
+        this.outlines.hedge.scale.multiplyScalar(1.02);
+
     }
 
     setEntities(data: schema.EntityData[]) {
@@ -279,8 +335,8 @@ class Entities {
         }
         for (let ent of this.entities) {
             if (ent === undefined) continue;
-            if (!alive[ent.userData.entityId]) {
-                this.deleteEntity(ent.userData.entityId);
+            if (!alive[ent.userData.entityID]) {
+                this.deleteEntity(ent.userData.entityID);
             }
         }
     }
@@ -288,39 +344,35 @@ class Entities {
     private addOrUpdateEntity(data: schema.EntityData) {
         let mesh = this.entities[data.id];
         if (!mesh) {
-            if (data.type === 'thrower') {
-                const geometry = new BoxGeometry(.75,.75,.75, 1,1,1);
-                const material = this.teamMaterials[data.teamID];
-                mesh = new Mesh(geometry, material);
-                mesh.userData.height = .75;
-            } else if (data.type === 'statue') {
-                const geometry = new BoxGeometry(.75,.75,2, 1,1,1);
-                const material = this.teamMaterials[data.teamID];
-                mesh = new Mesh(geometry, material);
-                mesh.userData.height = 2;
-            } else { // if (data.type === 'hedge') {
-                const geometry = new BoxGeometry(1,1,1.2, 1,1,1);
-                const material = this.teamMaterials[data.teamID];
-                mesh = new Mesh(geometry, material);
-                mesh.userData.height = 1.2;
+            const geometry = this.geometries[data.type];
+            let material;
+            if (data.type === 'statue') {
+                material = this.statueMaterials[data.teamID];
+            } else {
+                material = this.teamMaterials[data.teamID];
             }
+            mesh = new Mesh(geometry, material);
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            mesh.userData.entityId = data.id;
+            mesh.userData.entityID = data.id;
 
             this.entities[data.id] = mesh;
             this.scene.add(mesh);
         }
+        this.moveMesh(mesh, data);
+        mesh.translateZ(.01);
+    }
+
+    private moveMesh(mesh: Object3D, data: schema.EntityData) {
         if (data.heldBy !== undefined) {
-            mesh.position.z = .75 + .1 + mesh.userData.height / 2;
+            mesh.position.z = .75 + .1;
             mesh.setRotationFromAxisAngle(Object3D.DefaultUp, Math.PI / 4);
         } else {
-            mesh.position.z = mesh.userData.height / 2;
+            mesh.position.z = 0;
             mesh.setRotationFromAxisAngle(Object3D.DefaultUp, 0);
         }
         mesh.position.x = data.location.x;
         mesh.position.y = data.location.y;
-        mesh.updateMatrix();
     }
 
     private deleteEntity(id: schema.EntityID) {
@@ -329,6 +381,27 @@ class Entities {
             this.scene.remove(ent);
             this.entities[id] = undefined;
         }
+    }
+
+    outlineID?: number;
+    outlineEntity(data?: schema.EntityData): boolean {
+        if (data === undefined && this.outlineID === undefined ||
+            data !== undefined && data.id == this.outlineID) {
+            return false;
+        }
+        if (this.activeOutline) {
+            this.scene.remove(this.activeOutline);
+        }
+        if (data) {
+            let mesh = this.outlines[data.type];
+            this.moveMesh(mesh, data);
+            this.scene.add(mesh);
+            this.activeOutline = mesh;
+            this.outlineID = data.id;
+        } else {
+            this.outlineID = undefined;
+        }
+        return true;
     }
 }
 

@@ -8,7 +8,7 @@ import * as Inferno from 'inferno';
 import Component from 'inferno-component';
 
 import * as THREE from 'three';
-import debounce from 'lodash-es/debounce';
+import {frameDebounce} from '../util/framedebounce';
 
 import * as schema from '../schema';
 import * as state from '../state';
@@ -36,8 +36,6 @@ export interface RendererState {
     mouseRotateStartX?: number;
     mouseRotateStartY?: number;
     mouseRotateStartAngle?: number;
-    beforeRender: () => void;
-    afterRender: () => void;
 }
 export class RendererComponent extends Component<RendererProps, RendererState> {
     domNode: HTMLDivElement;
@@ -47,8 +45,6 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
         this.state = {
             renderer: new Renderer(props.gameState),
             mouseRotating: false,
-            beforeRender: () => {},
-            afterRender: () => {}
         }
     }
 
@@ -83,15 +79,14 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
             }}
             ref={(input) => this.domNode = input} >
                 <Stats addUpdateListener={this.props.addUpdateListener}
-                       onRenderBegin={(cb) => this.state.beforeRender = cb}
-                       onRenderEnd={(cb) => this.state.afterRender = cb} />
+                       onRenderBegin={(cb) => this.state.renderer.beforeRender = cb}
+                       onRenderEnd={(cb) => this.state.renderer.afterRender = cb} />
             </div>
     }
 
     redraw() {
-        this.state.beforeRender();
+        this.state.renderer.updateSize();
         this.state.renderer.redraw();
-        this.state.afterRender();
     }
 
     componentDidMount() {
@@ -102,6 +97,7 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
     componentDidUpdate() {
         if (this.state === null) return;
         this.state.renderer.update(this.props.gameState);
+        this.redraw();
     }
 }
 
@@ -113,8 +109,10 @@ export class Renderer {
     gameID: schema.GameID;
 
     scene: Scene;
-    perspective: PerspectiveCamera;
     isometric: OrthographicCamera;
+    topDown: OrthographicCamera;
+    activeCamera: OrthographicCamera;
+
     renderer: WebGLRenderer;
 
     teamColors: TeamColors;
@@ -127,17 +125,27 @@ export class Renderer {
 
     angle: number;
 
+    directional: DirectionalLight;
+
+    beforeRender: () => void;
+    afterRender: () => void;
+
     constructor(start: state.State) {
-        console.log('start')
         this.gameID = start.gameID;
         this.map = start;
         this.currentState = start;
+        this.beforeRender = () => {};
+        this.afterRender = () => {};
 
         // create a scene, that will hold all our elements such as objects, cameras and lights.
         this.scene = new Scene();
         (window as any)['scene'] = this.scene;
 
+        this.renderer = new WebGLRenderer();
+        this.renderer.setClearColor(0xEEEEEE);
         this.updateSize();
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.BasicShadowMap;
 
         // add the tiles to the world
         const tiles = makeTiles(this.map);
@@ -154,30 +162,36 @@ export class Renderer {
         // used for sizing cameras
         const mapD = 2 + Math.max(this.map.width, this.map.height) / 2;
 
-        const directional = new DirectionalLight("#fff", 0.5);
+        this.directional = new DirectionalLight("#fff", 0.5);
         // light shines from this position to 0,0,0
         // we want it mostly above with a slight offset for pretty
-        directional.castShadow = true;
-        directional.position.x = -1;
-        directional.position.y = -.4;
-        directional.position.z = 1.1;
-        directional.shadow.camera.left = -mapD-2;
-        directional.shadow.camera.right = mapD+2;
-        directional.shadow.camera.top = mapD+2;
-        directional.shadow.camera.bottom = -mapD-2;
-        this.scene.add(directional);
+        this.directional.castShadow = true;
+        this.directional.position.x = -1;
+        this.directional.position.y = -.4;
+        this.directional.position.z = 1.1;
+        this.directional.shadow.camera.left = -mapD-2;
+        this.directional.shadow.camera.right = mapD+2;
+        this.directional.shadow.camera.top = mapD+2;
+        this.directional.shadow.camera.bottom = -mapD-2;
+        this.scene.add(this.directional);
 
         this.setAngle(0);
+
+        this.setCamera('topDown');
+
         this.redraw();
     }
 
+    oldWidth?: number;
+    oldHeight?: number;
     updateSize() {
+        if (this.oldWidth === window.innerWidth && this.oldHeight === window.innerHeight) {
+            return;
+        }
+        this.oldWidth = window.innerWidth;
+        this.oldHeight = window.innerHeight;
         // create a render and set the size
-        this.renderer = new WebGLRenderer();
-        this.renderer.setClearColor(0xEEEEEE);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.BasicShadowMap;
         // makes picture cleaner but more expensive on retina
         // TODO: conditionally enable? fancy mode?
         this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -185,14 +199,12 @@ export class Renderer {
         const aspect = window.innerWidth / window.innerHeight;
 
         // create a camera, which defines where we're looking at.
-        this.perspective = new PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.perspective.position.x = -6;
-        this.perspective.position.y = -6;
-        this.perspective.position.z = 2;
-        this.perspective.lookAt(new Vector3(this.map.width / 2, this.map.height / 2, 0));
-        
         const mapD = 2 + Math.max(this.map.width, this.map.height) / 2;
         this.isometric = new THREE.OrthographicCamera(- mapD * aspect, mapD * aspect, mapD, - mapD, -200, 200);
+
+        this.topDown = new THREE.OrthographicCamera(- mapD * aspect, mapD * aspect, mapD, - mapD, -200, 200);
+        this.topDown.position.set(this.map.width / 2, this.map.height / 2, 5);
+        this.topDown.up.set(0, 1, 0);
     }
 
     get domElement() {
@@ -200,12 +212,25 @@ export class Renderer {
     }
 
     update = (state: state.State) => {
-        console.log('update')
         if (state.gameID !== this.gameID) {
             return;
         }
         this.currentState = state;
         this.entities.setEntities(state.entities);
+    }
+
+    cameraName: string;
+    setCamera(cameraName: 'isometric' | 'topDown') {
+        if (this.cameraName === cameraName) {
+            return;
+        }
+        this.activeCamera = this[cameraName];
+        this.cameraName = cameraName;
+        if (cameraName === 'topDown') {
+            this.directional.castShadow = false;
+        } else {
+            this.directional.castShadow = true;
+        }
         this.redraw();
     }
 
@@ -218,9 +243,11 @@ export class Renderer {
         this.isometric.lookAt(new THREE.Vector3(this.map.width / 2 - .5, this.map.height / 2 - .5, 0));
     }
 
-    redraw = debounce(() => {
-        this.renderer.render(this.scene, this.isometric);
-    }, 0);
+    redraw = frameDebounce(() => {
+        this.beforeRender();
+        this.renderer.render(this.scene, this.activeCamera);
+        this.afterRender();
+    });
 }
 
 /**
@@ -246,6 +273,7 @@ class Entities {
     setEntities(data: schema.EntityData[]) {
         let alive: {[id: number]: boolean} = Object.create(null);
         for (let ent of data) {
+            if (ent === undefined) continue;
             this.addOrUpdateEntity(ent);
             alive[ent.id] = true;
         }
@@ -285,8 +313,10 @@ class Entities {
         }
         if (data.heldBy !== undefined) {
             mesh.position.z = .75 + .1 + mesh.userData.height / 2;
+            mesh.setRotationFromAxisAngle(Object3D.DefaultUp, Math.PI / 4);
         } else {
             mesh.position.z = mesh.userData.height / 2;
+            mesh.setRotationFromAxisAngle(Object3D.DefaultUp, 0);
         }
         mesh.position.x = data.location.x;
         mesh.position.y = data.location.y;

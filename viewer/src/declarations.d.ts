@@ -21,3 +21,5 @@ declare module 'stats.js' {
     const Stats: any;
     export default Stats;
 }
+
+declare function require(m: string);

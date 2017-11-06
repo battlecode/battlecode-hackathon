@@ -2,10 +2,10 @@ import * as schema from './schema';
 import LocationMap from './locationmap';
 import clone from 'lodash-es/clone';
 import Mutex from './mutex';
+import * as utf8 from './util/utf8';
 
-import * as pako from 'pako';
+import {inflate} from 'pako/lib/inflate';
 import * as base64 from 'base64-js';
-import { TextDecoder } from 'text-encoding';
 
 export class State {
     gameID: schema.GameID;
@@ -26,7 +26,8 @@ export class State {
         }
         this.teams = clone(start.teams);
         this.gameID = start.gameID;
-        this.turn = 0;
+        // first turn received is 0
+        this.turn = -1;
         this.winner = undefined;
         this.width = start.initialState.width;
         this.height = start.initialState.height;
@@ -132,7 +133,6 @@ export class TimelineCollection {
             let {gameID} = command;
 
             if (this.timelines[gameID] !== undefined) {
-                console.log(command.command, gameID);
                 this.timelines[gameID].apply(command);
             } else {
                 if (this.unhandled[gameID] === undefined) {
@@ -142,8 +142,8 @@ export class TimelineCollection {
             }
         } else if (command.command === 'gameReplay') {
             let buf = base64.toByteArray(command.matchData);
-            let data = pako.ungzip(buf);
-            let json = new TextDecoder('utf-8').decode(data);
+            let data: Uint8Array = inflate(buf);
+            let json = utf8.decodeUTF8(data);
             let matchData = <schema.MatchData>JSON.parse(json);
             let {gameID} = matchData;
 

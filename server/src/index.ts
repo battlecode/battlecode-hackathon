@@ -254,6 +254,7 @@ export class GameRunner {
         this.started = true;
         const firstTurn = this.game.firstTurn();
         await this.broadcast(firstTurn);
+        this.pastTurns.push(firstTurn);
     }
 
     async makeTurn(turn: MakeTurn, client: Client) {
@@ -574,10 +575,19 @@ export default class Server {
 
     private handleClose = async (client: Client) => {
         this.log(`Client disconnected: ${prettyID(client.id)}`)
+        let saves = new Array<Promise<void>>();
         for (let game of this.games.values()) {
             let broken = game.deleteClient(client.id);
             if (broken) {
-                this.log(`Ending game early: ${prettyID(game.id)}`);
+                let type;
+                if (game instanceof GameRunner) {
+                    type = 'active game';
+                    saves.push(this.saveGame(game));
+                } else {
+                    type = 'lobby';
+                }
+
+                this.log(`Ending ${type} early: ${prettyID(game.id)}`);
                 this.games.delete(game.id);
             }
         }
@@ -587,6 +597,7 @@ export default class Server {
                 break;
             }
         }
+        await Promise.all(saves);
     };
 
     private handleLogin = async (login: Login, client: Client) => {

@@ -2,7 +2,7 @@
 // note: above is wacky old declaration syntax used so that we can
 // import using webpack loaders
 import ReconnectingWebSocket from 'reconnectingwebsocket';
-import debounce from 'lodash-es/debounce';
+import {frameDebounce} from './util/framedebounce';
 import * as Inferno from 'inferno';
 import Component from 'inferno-component';
 
@@ -10,8 +10,10 @@ import * as schema from './schema';
 import * as state from './state';
 import {RendererComponent} from './components/renderer';
 import {Stats} from './components/stats';
+import {Minimap} from './components/minimap';
 
-import * as _pure from 'purecss/build/pure.css';
+require('purecss/build/pure.css');
+require('./style.css');
 
 const testMap: schema.GameStart = {
     gameID: 'test',
@@ -93,15 +95,22 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const renderer = () => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
-        return <RendererComponent gameState={timelines.timelines[gameID].farthest}
-                                  key={gameID}
-                                  addUpdateListener={(cb) => updateCbs.push(cb)}/>
+        return <div>
+            <RendererComponent gameState={timelines.timelines[gameID].farthest}
+                key={gameID}
+                addUpdateListener={(cb) => updateCbs.push(cb)}/>
+            <div style="position: fixed; top: 100px; left: 0; z-index: 20000;">
+            minimap test
+            {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
+        </div>
     } else {
         return 'bananas';
     }
 }
 
-const render = debounce(() => {
+const render = frameDebounce(() => {
     Inferno.render(renderer(), document.getElementById('app'))
 });
 render();
+
+window.addEventListener('resize', render, false);

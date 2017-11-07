@@ -1,19 +1,22 @@
-import { Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
+import {
+    Scene, PerspectiveCamera, WebGLRenderer, PlaneGeometry,
     MeshLambertMaterial, Mesh, Vector3, PCFSoftShadowMap, AmbientLight,
     SpotLight, SphereGeometry, BoxGeometry, EllipseCurve, TextureLoader,
     SpriteMaterial, DataTexture, RGBAFormat, DirectionalLight, Object3D,
-    OrthographicCamera } from 'three';
+    OrthographicCamera
+} from 'three';
 
 import * as Inferno from 'inferno';
 import Component from 'inferno-component';
 
 import * as THREE from 'three';
-import {frameDebounce} from '../util/framedebounce';
+import { frameDebounce } from '../util/framedebounce';
 
 import * as schema from '../schema';
 import * as state from '../state';
+import { TOP_BAR_HEIGHT } from '../constants';
 
-import {Stats} from './stats';
+import { Stats } from './stats';
 
 // World coordinates:
 // x, y are [0,width) x [0, height)
@@ -49,7 +52,7 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
     }
 
     render() {
-        return <div 
+        return <div
             onmousedown={(e) => {
                 if (e.button === 1 || e.button === 2) {
                     this.state.mouseRotating = true;
@@ -83,10 +86,10 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
                 }
             }}
             ref={(input) => this.domNode = input} >
-                <Stats addUpdateListener={this.props.addUpdateListener}
-                       onRenderBegin={(cb) => this.state.renderer.beforeRender = cb}
-                       onRenderEnd={(cb) => this.state.renderer.afterRender = cb} />
-            </div>
+            <Stats addUpdateListener={this.props.addUpdateListener}
+                onRenderBegin={(cb) => this.state.renderer.beforeRender = cb}
+                onRenderEnd={(cb) => this.state.renderer.afterRender = cb} />
+        </div>
     }
 
     redraw() {
@@ -139,8 +142,8 @@ export class Renderer {
         this.gameID = start.gameID;
         this.map = start;
         this.currentState = start;
-        this.beforeRender = () => {};
-        this.afterRender = () => {};
+        this.beforeRender = () => { };
+        this.afterRender = () => { };
 
         // create a scene, that will hold all our elements such as objects, cameras and lights.
         this.scene = new Scene();
@@ -174,10 +177,10 @@ export class Renderer {
         this.directional.position.x = -1;
         this.directional.position.y = -.4;
         this.directional.position.z = 1.1;
-        this.directional.shadow.camera.left = -mapD-2;
-        this.directional.shadow.camera.right = mapD+2;
-        this.directional.shadow.camera.top = mapD+2;
-        this.directional.shadow.camera.bottom = -mapD-2;
+        this.directional.shadow.camera.left = -mapD - 2;
+        this.directional.shadow.camera.right = mapD + 2;
+        this.directional.shadow.camera.top = mapD + 2;
+        this.directional.shadow.camera.bottom = -mapD - 2;
         this.directional.shadow.mapSize.height = 1024;
         this.directional.shadow.mapSize.width = 1024;
         this.scene.add(this.directional);
@@ -192,18 +195,20 @@ export class Renderer {
     oldWidth?: number;
     oldHeight?: number;
     updateSize() {
-        if (this.oldWidth === window.innerWidth && this.oldHeight === window.innerHeight) {
+        const width = window.innerWidth;
+        const height = window.innerHeight - TOP_BAR_HEIGHT;
+        if (this.oldWidth === width && this.oldHeight === height) {
             return;
         }
-        this.oldWidth = window.innerWidth;
-        this.oldHeight = window.innerHeight;
+        this.oldWidth = width;
+        this.oldHeight = height;
         // create a render and set the size
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setSize(width, height);
         // makes picture cleaner but more expensive on retina
         // TODO: conditionally enable? fancy mode?
         this.renderer.setPixelRatio(window.devicePixelRatio);
 
-        const aspect = window.innerWidth / window.innerHeight;
+        const aspect = width / height;
 
         // create a camera, which defines where we're looking at.
         const mapD = 2 + Math.max(this.map.width, this.map.height) / 2;
@@ -245,8 +250,8 @@ export class Renderer {
         this.angle = angle;
         const out = 3;
         this.isometric.position.set((this.map.width / 2 - .5) + Math.cos(angle) * out,
-                                    (this.map.height / 2 - .5) + Math.sin(angle) * out,
-                                    out);
+            (this.map.height / 2 - .5) + Math.sin(angle) * out,
+            out);
         this.isometric.lookAt(new THREE.Vector3(this.map.width / 2 - .5, this.map.height / 2 - .5, 0));
     }
 
@@ -254,8 +259,8 @@ export class Renderer {
     setMouse(mouseX: number, mouseY: number) {
         // normalize location to what three expects
         let mouse = {
-            x: ( mouseX / window.innerWidth ) * 2 - 1,
-            y: - ( mouseY / window.innerHeight ) * 2 + 1
+            x: (mouseX / window.innerWidth) * 2 - 1,
+            y: - ((mouseY - TOP_BAR_HEIGHT) / (window.innerHeight - TOP_BAR_HEIGHT)) * 2 + 1
         };
 
         this.raycaster.setFromCamera(mouse, this.activeCamera);
@@ -291,9 +296,9 @@ class Entities {
     entities: (Mesh | undefined)[];
     teamMaterials: MeshLambertMaterial[];
     statueMaterials: MeshLambertMaterial[];
-    geometries: {[type: string]: THREE.BufferGeometry};
+    geometries: { [type: string]: THREE.BufferGeometry };
     outlineMaterial: THREE.LineBasicMaterial;
-    outlines: {[type: string]: THREE.Line};
+    outlines: { [type: string]: THREE.Line };
     activeOutline?: THREE.Line;
 
     constructor(scene: Scene) {
@@ -306,9 +311,9 @@ class Entities {
             this.statueMaterials.push(new MeshLambertMaterial({ color: color, transparent: true, opacity: 0.7 }));
         }
         this.geometries = {
-            thrower: new THREE.BoxBufferGeometry(.75,.75,.75, 1,1,1).translate(0,0, .75/2),
-            statue: new THREE.BoxBufferGeometry(.75,.75,2, 1,1,1).translate(0, 0, 2/2),
-            hedge: new THREE.BoxBufferGeometry(1,1,1.2, 1,1,1).translate(0,0,1.2/2)
+            thrower: new THREE.BoxBufferGeometry(.75, .75, .75, 1, 1, 1).translate(0, 0, .75 / 2),
+            statue: new THREE.BoxBufferGeometry(.75, .75, 2, 1, 1, 1).translate(0, 0, 2 / 2),
+            hedge: new THREE.BoxBufferGeometry(1, 1, 1.2, 1, 1, 1).translate(0, 0, 1.2 / 2)
         }
 
         // can you guess how outlines work?
@@ -327,7 +332,7 @@ class Entities {
     }
 
     setEntities(data: schema.EntityData[]) {
-        let alive: {[id: number]: boolean} = Object.create(null);
+        let alive: { [id: number]: boolean } = Object.create(null);
         for (let ent of data) {
             if (ent === undefined) continue;
             this.addOrUpdateEntity(ent);
@@ -408,11 +413,11 @@ class Entities {
 export const TEAM_COLORS = [0x00a31d, 0xee0000, 0x0000ff, 0xff00ff, 0xeeff00, 0x754a00];
 
 export const setColor = (data: Uint8Array | Uint8ClampedArray,
-                         width: number,
-                         height: number,
-                         x: number,
-                         y: number,
-                         color: number) => {
+    width: number,
+    height: number,
+    x: number,
+    y: number,
+    color: number) => {
     const i = y * width * 4 + x * 4;
     data[i + 0] = (color >> 16) & 0xff;
     data[i + 1] = (color >> 8) & 0xff

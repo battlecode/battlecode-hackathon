@@ -35,11 +35,11 @@ export class Stats extends Component<StatsProps, StatsState> {
         this.props.addUpdateListener(newUpdate);
         this.props.onRenderBegin(() => {
             if (this.state === null) return;
-            this.state.wrapped.begin()
+            this.state.wrapped.begin();
         });
         this.props.onRenderEnd(() => {
             if (this.state === null) return;
-            this.state.wrapped.end()
+            this.state.wrapped.end();
         });
     }
 
@@ -49,6 +49,15 @@ export class Stats extends Component<StatsProps, StatsState> {
 
     componentDidMount() {
         if (this.state === null) return;
+
+        // stats.js doesn't provide an api to change the location of
+        // the stats pop-up, so we just change it with Javascript.
+        this.state.wrapped.dom.style.position = 'absolute';
+        this.state.wrapped.dom.style.top = '';
+        this.state.wrapped.dom.style.left = '';
+        this.state.wrapped.dom.style.bottom = '10px';
+        this.state.wrapped.dom.style.right = '5px';
+
         this.domNode.appendChild(this.state.wrapped.dom);
     }
 }

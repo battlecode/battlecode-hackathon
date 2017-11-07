@@ -2,15 +2,16 @@
 // note: above is wacky old declaration syntax used so that we can
 // import using webpack loaders
 import ReconnectingWebSocket from 'reconnectingwebsocket';
-import {frameDebounce} from './util/framedebounce';
+import { frameDebounce } from './util/framedebounce';
 import * as Inferno from 'inferno';
 import Component from 'inferno-component';
 
 import * as schema from './schema';
 import * as state from './state';
-import {RendererComponent} from './components/renderer';
-import {Stats} from './components/stats';
-import {Minimap} from './components/minimap';
+import { TOP_BAR_HEIGHT } from './constants';
+import { RendererComponent } from './components/renderer';
+import { Stats } from './components/stats';
+import { Minimap } from './components/minimap';
 
 require('purecss/build/pure.css');
 require('./style.css');
@@ -37,22 +38,22 @@ const testMap: schema.GameStart = {
             ['G', 'G', 'D', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
         ],
         entities: [
-            { id: 0, type: 'thrower', teamID: 1, location: {x: 0, y: 0}, hp: 10 },
-            { id: 1, type: 'thrower', teamID: 2, location: {x: 4, y: 9}, hp: 10 },
-            { id: 2, type: 'hedge', teamID: 0, location: {x: 4, y: 8}, hp: 10 },
-            { id: 3, type: 'statue', teamID: 1, location: {x: 5, y: 5}, hp: 10 },
-            { id: 4, type: 'thrower', teamID: 1, location: {x: 6, y: 6}, hp: 10, holding: 5 },
-            { id: 5, type: 'thrower', teamID: 2, location: {x: 6, y: 6}, hp: 10, heldBy: 4 }
+            { id: 0, type: 'thrower', teamID: 1, location: { x: 0, y: 0 }, hp: 10 },
+            { id: 1, type: 'thrower', teamID: 2, location: { x: 4, y: 9 }, hp: 10 },
+            { id: 2, type: 'hedge', teamID: 0, location: { x: 4, y: 8 }, hp: 10 },
+            { id: 3, type: 'statue', teamID: 1, location: { x: 5, y: 5 }, hp: 10 },
+            { id: 4, type: 'thrower', teamID: 1, location: { x: 6, y: 6 }, hp: 10, holding: 5 },
+            { id: 5, type: 'thrower', teamID: 2, location: { x: 6, y: 6 }, hp: 10, heldBy: 4 }
         ],
         sectorSize: 10,
         sectors: [
-            {topLeft: {x: 0, y: 0}, controllingTeamID: 0}
+            { topLeft: { x: 0, y: 0 }, controllingTeamID: 0 }
         ]
     },
     teams: [
-        {teamID: 0, name: 'neutral'},
-        {teamID: 1, name: 'A'},
-        {teamID: 2, name: 'B'}
+        { teamID: 0, name: 'neutral' },
+        { teamID: 1, name: 'A' },
+        { teamID: 2, name: 'B' }
     ]
 };
 
@@ -95,12 +96,12 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const renderer = () => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
-        return <div>
+        return <div style={`position: relative; top: ${TOP_BAR_HEIGHT}px;`}>
             <RendererComponent gameState={timelines.timelines[gameID].farthest}
                 key={gameID}
-                addUpdateListener={(cb) => updateCbs.push(cb)}/>
-            <div style="position: fixed; top: 100px; left: 0; z-index: 20000;">
-            minimap test
+                addUpdateListener={(cb) => updateCbs.push(cb)} />
+            <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
+                minimap test
             {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
         </div>
     } else {

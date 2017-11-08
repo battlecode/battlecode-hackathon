@@ -31,6 +31,7 @@ const DELAYS = {
 const DAMAGES = {
     thrower: 4,
     statue: 1,
+    hedge: 1,
     recoil: 2,
     dirt: 1,
     fatigue: 1,
@@ -187,7 +188,29 @@ export class Game {
             // TODO this is wrong
             diff.winnerID = 1;
         }
+
+        let winningTeam = this.getWinningTeam();
+        if (winningTeam > 0) {
+            diff.winnerID = winningTeam;
+        }
+
         return diff;
+    }
+
+    // returns teamID of winning team or -1 if no team winning
+    private getWinningTeam(): TeamID {
+        let winningTeam = -1;
+        for (var entity of this.entities.values()) {
+            if (winningTeam === -1) {
+                winningTeam = entity.teamID;
+            }
+            else if (winningTeam !== entity.teamID) {
+                winningTeam = -1;
+                break;
+            }
+        }
+
+        return winningTeam;
     }
 
     private makeNextTurn(): NextTurn {
@@ -477,6 +500,9 @@ export class Game {
                 if (typeof err === "string") return err;
             } else if (target.type === "statue") {
                 let err = this.dealDamage(target.id, DAMAGES.statue);
+                if (typeof err === "string") return err;
+            } else if (target.type === "hedge") {
+                let err = this.dealDamage(target.id, DAMAGES.hedge);
                 if (typeof err === "string") return err;
             }
         }

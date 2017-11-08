@@ -243,6 +243,11 @@ export interface GameStart {
     gameID: GameID;
     initialState: GameState;
     teams: TeamData[];
+
+    /**
+     * Timeout for each turn.
+     */
+    timeoutMS: number;
 }
 
 /**
@@ -267,6 +272,16 @@ export interface NextTurn {
 
     nextTeamID: TeamID;
     winnerID?: TeamID;
+}
+
+/**
+ * Tells a team that it missed a turn.
+ * Only sent to the team that missed; will be immediately followed by a NextTurn.
+ */
+export interface MissedTurn {
+    command: "missedTurn";
+    gameID: GameID;
+    turn: number;
 }
 
 /**
@@ -323,6 +338,11 @@ export interface CreateGame {
      */
     sendReplay?: boolean;
 
+    /**
+     * Timeout for each turn, in milliseconds.
+     * If you don't want a timeout, just set it really high.
+     */
+    timeoutMS: number;
 }
 
 export interface CreateGameConfirm {
@@ -381,6 +401,7 @@ export interface GameReplay {
     // Note: this data is also included in the match data; these fields are provided
     // to make life simpler for the consumer
     id: GameID;
+
     winner?: TeamData;
 
     /**
@@ -425,5 +446,5 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
  */
 export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
     ListReplaysRequest | ReplayRequest;
-export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | ErrorCommand | Keyframe |
+export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | MissedTurn | ErrorCommand | Keyframe |
     ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse;

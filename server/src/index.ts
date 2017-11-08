@@ -86,6 +86,7 @@ export class Lobby {
     spectators: Client[];
     debug: boolean;
     isPickup: boolean;
+    timeoutMS: number;
 
     constructor(id: GameID,
                 create: CreateGame,
@@ -94,6 +95,7 @@ export class Lobby {
                 client?: Client) {
         this.id = id;
         this.debug = debug;
+        this.timeoutMS = create.timeoutMS;
 
         // if no teams have keys, this is a pickup game
         this.isPickup = create.teams ?
@@ -160,7 +162,14 @@ export class Lobby {
             client.send(confirmation);
 
             if (this.requiredTeams.length == 0) {
-                return new GameRunner(this.id, this.map, this.playerTeams, this.onEnd, this.spectators, this.debug);
+                return new GameRunner(this.id,
+                    this.map,
+                    this.playerTeams,
+                    this.onEnd,
+                    this.spectators,
+                    this.debug,
+                    this.timeoutMS
+                );
             } else {
                 return undefined;
             }
@@ -199,17 +208,26 @@ export class GameRunner {
     winner?: TeamData;
     spectators: Client[];
 
+    // length of timeouts
+    timeoutMS: number;
+    // timestamp of last turn
+    lastTurnMS: number;
+    // the handle of the timeout that was created to time out the last turn
+    timeoutHandle?: NodeJS.Timer;
+
     constructor(
         id: GameID,
         map: MapFile,
         playerTeams: [Client, TeamData][],
         onEnd: Client[],
         spectators: Client[],
-        debug: boolean
+        debug: boolean,
+        timeoutMS: number
     ) {
         this.id = id;
         this.playerClients = [];
         this.players = new Map();
+        this.timeoutMS = timeoutMS;
         const teams: TeamData[] = [];
         for (let [client, team] of playerTeams) {
             this.playerClients.push(client);
@@ -248,7 +266,8 @@ export class GameRunner {
             command: "start",
             gameID: this.id,
             initialState: this.game.initialState,
-            teams: this.game.teams
+            teams: this.game.teams,
+            timeoutMS: this.timeoutMS
         };
         await this.broadcast(start);
         this.started = true;
@@ -257,12 +276,53 @@ export class GameRunner {
         this.pastTurns.push(firstTurn);
     }
 
+    /**
+     * ugh
+     */
+    private getClientForTeam(id: TeamID): Client {
+        let cl;
+        for (let [clientID, teamID] of this.players.entries()) {
+            if (teamID === id) {
+                cl = clientID;
+            }
+        }
+        if (cl === undefined) {
+            throw new Error('no such team: '+id);
+        }
+        for (let client of this.playerClients) {
+            if (client.id === cl) {
+                return client;
+            }
+        }
+        throw new Error('no such client??: '+cl);
+    }
+
+    startTimeout() {
+        // this is cancelled if timeout isn't hit
+        this.timeoutHandle = setTimeout(async () => {
+            this.timeoutHandle = undefined;
+            let client = this.getClientForTeam(this.game.nextTeam);
+            let turn = this.game.turn + 1;
+            client.send({command: 'missedTurn', gameID: this.game.id, turn: turn});
+            // make fake turn
+            await this.makeTurn({
+                command: 'makeTurn',
+                gameID: this.id,
+                turn: turn,
+                actions: []
+            }, client);
+        }, this.timeoutMS);
+    }
+
     async makeTurn(turn: MakeTurn, client: Client) {
         const teamID = this.players.get(client.id);
         if (teamID === undefined) {
             throw new ClientError("non-player client can't make turn: "+client.id);
         }
         const nextTurn = this.game.makeTurn(teamID, turn.turn, turn.actions);
+        if (this.timeoutHandle) {
+            clearTimeout(this.timeoutHandle);
+        }
 
         await this.broadcast(nextTurn);
 
@@ -274,6 +334,8 @@ export class GameRunner {
 
         if (nextTurn.winnerID) {
             this.winner = this.game.teams[nextTurn.winnerID];
+        } else {
+            this.startTimeout();
         }
     }
 
@@ -311,6 +373,9 @@ export class GameRunner {
         }
         if (this.players.has(id)) {
             // client was playing, we need to shutdown now
+            if (this.timeoutHandle) {
+                clearTimeout(this.timeoutHandle);
+            }
             return true;
         }
         for (let i = 0; i < this.onEnd.length; i++) {
@@ -505,7 +570,8 @@ export default class Server {
             {
                 command: "createGame",
                 map: await this.loadMap(this.mapNames[Math.floor(Math.random() * this.mapNames.length)]),
-                sendReplay: false
+                sendReplay: false,
+                timeoutMS: 100
             },
             this.spectators,
             this.opts.debug
@@ -554,7 +620,7 @@ export default class Server {
                     command: "error",
                     reason: e.message
                 });
-                this.error(`Error from client ${prettyID(client.id)}: ${e.message}`)
+                this.error(`Error from client ${prettyID(client.id)}: ${e.stack}`)
             } else if (e instanceof Error) {
                 // our fault
                 client.send({

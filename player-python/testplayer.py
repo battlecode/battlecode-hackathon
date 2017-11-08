@@ -19,7 +19,6 @@ def nearest_glass_state(state, entity):
 
     return nearest_statue
 
-
 for state in game.turns():
     for entity in state.get_entities(team=state.my_team):
         if entity.team != state.my_team or not entity.can_act:
@@ -41,10 +40,6 @@ for state in game.turns():
         for direction in battlecode.Direction.all():
             if entity.can_move(direction):
                 entity.queue_move(direction)
-
-    time.sleep(0.1)
-
-
 
 end = time.clock()
 print('clock time: '+str(end - start))

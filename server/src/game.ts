@@ -461,21 +461,27 @@ export class Game {
         // if targetLoc is out of bounds, then target does not exist
         var targetId;
         if (isOutOfBound(targetLoc, this.initialState)){
+            console.log("Out of Bounds")
             targetId = undefined;
         }
         else {
+            console.log(this.occupied);
             targetId = this.occupied.get(targetLoc.x, targetLoc.y);
         }
         var target;
-        if (targetId) {
+        console.log(targetLoc)
+        console.log(targetId)
+        if (targetId !== undefined) {
             target = this.getEntity(targetId);
         }
+        console.log(target)
         if (target) {
             // Target may or may not be destroyed
             if (target.type === "thrower") {
                 let err = this.dealDamage(target.id, DAMAGES.thrower);
                 if (typeof err === "string") return err;
             } else if (target.type === "statue") {
+                console.log("Hitting this")
                 let err = this.dealDamage(target.id, DAMAGES.statue);
                 if (typeof err === "string") return err;
             }

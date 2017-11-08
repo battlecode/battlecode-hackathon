@@ -110,8 +110,8 @@ class Entity(object):
         self.disintegrated = False
 
     def __str__(self):
-        contents = '<id:{},type:{},team:{},location:{}'.format(
-            self.id, self.type, self.team, self.location)
+        contents = '<id:{},type:{},team:{},location:{},hp:{}'.format(
+            self.id, self.type, self.team, self.location, self.hp)
         if self.cooldown > 0:
             contents += ',cooldown:{}'.format(self.cooldown)
         if self.holding is not None:
@@ -290,6 +290,8 @@ class Entity(object):
             entity.disintegrated:
             return False
         else:
+            print(entity)
+            print(self._state.map._occupied)
             return True
 
     def queue_move(self, direction):
@@ -312,7 +314,11 @@ class Entity(object):
             if self.can_move(direction):
                 del self._state.map._occupied[self.location]
                 self.location = self.location.adjacent_location_in_direction(direction)
+                if self.holding != None:
+                    self.holding.location = self.location
                 self._state.map._occupied[self.location] = self
+                print("Move:")
+                print(self._state.map._occupied)
                 self.cooldown_end = self._state.turn + 1
 
     def queue_build(self, direction):
@@ -395,6 +401,7 @@ class Entity(object):
             if not self.can_throw(direction):
                 return
 
+            print(self.holding)
             held = self.holding
             self.holding = None
             self.holding_end = None
@@ -442,6 +449,7 @@ class Entity(object):
 
         if self._state.speculate:
             if self.can_pickup(entity):
+                print(entity.location)
                 del self._state.map._occupied[entity.location]
                 self.holding = entity
                 entity.held_by = self
@@ -641,6 +649,8 @@ class State(object):
         self._action_queue = []
 
         self._update_entities(initialState['entities'])
+        print("Update")
+        print(self.map._occupied)
         self.map._update_sectors(initialState['sectors'])
 
         self.speculate = True
@@ -683,9 +693,14 @@ class State(object):
         self.entities[self.max_id]._update(data)
 
     def _kill_entities(self, entities):
+        print("Map:")
+        print(self.map._occupied)
+        print(entities)
         for dead in entities:
             ent = self.entities[dead]
-            del self.map._occupied[ent.location]
+            if(ent.held_by == None):
+                if self.map._occupied[ent.location].id == ent.id:
+                    del self.map._occupied[ent.location]
             del self.entities[dead]
 
     def _validate(self):
@@ -839,8 +854,8 @@ class Game(object):
             if 'winner' in turn:
                 raise Exception('Game finished')
 
-            self.state._kill_entities(turn['dead'])
             self.state._update_entities(turn['changed'])
+            self.state._kill_entities(turn['dead'])
             self.state.map._update_sectors(turn['changedSectors'])
 
             self.state.turn = turn['turn'] + 1

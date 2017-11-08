@@ -14,6 +14,7 @@ import random
 import string
 import boto3
 import botocore
+import time
 
 def random_key(length):
     key = ''
@@ -97,12 +98,22 @@ except Exception as e:
 
 BUCKET_NAME = 'battlecode-submissions-hackathon-2017-stage'
 s3 = boto3.resource('s3')
+MAX_MATCHES = 4
 
 while True:
+	# check if number of games running is less than N
+	c.execute("SELECT id FROM scrimmage_matches WHERE status='running'")
+	running = c.fetchall()
+
+	if len(running) >= MAX_MATCHES:
+		time.sleep(0.005)
+		continue
+
 	c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id WHERE status='queued' ORDER BY request_time DESC")
 	matches = c.fetchall()
 
 	if len(matches) < 1:
+		time.sleep(0.005)
 		continue
 
 	match = matches[0]

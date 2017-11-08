@@ -124,7 +124,6 @@ export class Game {
      */
     makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
         // player will send the last turn id they received
-
         if (turn !== this.turn + 1) {
             throw new ClientError("wrong turn: given: "+turn+", should be: "+this.turn + 1);
         }
@@ -490,7 +489,7 @@ export class Game {
             targetId = this.occupied.get(targetLoc.x, targetLoc.y);
         }
         var target;
-        if (targetId) {
+        if (targetId !== undefined) {
             target = this.getEntity(targetId);
         }
         if (target) {

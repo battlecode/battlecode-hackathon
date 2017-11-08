@@ -8,6 +8,7 @@ import math
 import io
 import time
 import os
+import sys
 try:
     import cPickle as pickle
 except:
@@ -16,6 +17,11 @@ try:
     import ujson as json
 except:
     import json
+import threading
+try:
+    from queue import Queue
+except:
+    from Queue import Queue
 
 # pylint: disable = too-many-instance-attributes, invalid-name
 
@@ -110,8 +116,8 @@ class Entity(object):
         self.disintegrated = False
 
     def __str__(self):
-        contents = '<id:{},type:{},team:{},location:{}'.format(
-            self.id, self.type, self.team, self.location)
+        contents = '<id:{},type:{},team:{},location:{},hp:{}'.format(
+            self.id, self.type, self.team, self.location, self.hp)
         if self.cooldown > 0:
             contents += ',cooldown:{}'.format(self.cooldown)
         if self.holding is not None:
@@ -195,8 +201,6 @@ class Entity(object):
 
         return self.cooldown_end - self._state.turn
 
-        return cooldown
-
     @property
     def turns_until_drop(self):
         '''The number of turns until this entity drops its held entity.'''
@@ -231,7 +235,6 @@ class Entity(object):
 
         # Possible change this to
         return self.is_robot and not self.is_holding and not self.is_held
-
 
     def can_throw(self, direction):
         if not self.is_holding or not self.can_act:
@@ -312,6 +315,8 @@ class Entity(object):
             if self.can_move(direction):
                 del self._state.map._occupied[self.location]
                 self.location = self.location.adjacent_location_in_direction(direction)
+                if self.holding != None:
+                    self.holding.location = self.location
                 self._state.map._occupied[self.location] = self
                 self.cooldown_end = self._state.turn + 1
 
@@ -335,8 +340,6 @@ class Entity(object):
             if self.can_build(direction):
                 self.cooldown_end = self._state.turn + 10
                 self._state._build_statue(location)
-
-
 
     def queue_move_location(self, location):
         '''Queues a move, so that this object will move in the next turn.'''
@@ -427,8 +430,6 @@ class Entity(object):
             held.held_by = None
 
             self.cooldown_end = self._state.turn + 10
-
-
 
     def queue_pickup(self, entity):
         if __debug__:
@@ -685,7 +686,9 @@ class State(object):
     def _kill_entities(self, entities):
         for dead in entities:
             ent = self.entities[dead]
-            del self.map._occupied[ent.location]
+            if(ent.held_by == None):
+                if self.map._occupied[ent.location].id == ent.id:
+                    del self.map._occupied[ent.location]
             del self.entities[dead]
 
     def _validate(self):
@@ -762,6 +765,10 @@ class Game(object):
             'name': name,
         })
 
+        self._recv_queue = Queue()
+
+        threading.Thread(target=self._recv_thread, name='Battlecode Communication Thread').start()
+
         # handle login response
         resp = self._recv()
         assert resp['command'] == 'loginConfirm'
@@ -785,11 +792,13 @@ class Game(object):
 
         self.winner = None
 
+        self._missed_turns = set()
+
         # wait for our first turn
         # TODO: run messaging logic on another thread?
         self._next_team = None
         self._await_turn()
-
+    
     def _send(self, message):
         '''Send a dictionary as JSON to the server.
         See server/src/schema.ts for valid messages.'''
@@ -799,22 +808,36 @@ class Game(object):
         self._socket.write(message.encode('utf-8'))
         self._socket.write(b'\n')
         self._socket.flush()
+    
+    def _recv_thread(self):
+        '''Loop, receiving '\n'-delimited JSON messages from the server.
+        See server/src/schema.ts for valid messages.'''
+        while True:
+            # next() reads lines from a file object
+            try:
+                message = next(self._socket)
+            except:
+                self._recv_queue.put(None)
+                return
+
+            result = json.loads(message)
+
+            if "command" not in result:
+                raise BattlecodeError("Unknown result: "+str(result))
+            elif result['command'] == 'error':
+                raise BattlecodeError(result['reason'])
+            elif result['command'] == 'missedTurn':
+                sys.stderr.write('Battlecode warning: missed turn {}, speed up your code!\n'.format(result['turn']))
+                self._missed_turns.add(result['turn'])
+            else:
+                self._recv_queue.put(result)
 
     def _recv(self):
-        '''Receive a '\n'-delimited JSON message from the server.
-        See server/src/schema.ts for valid messages.'''
-        # next() reads lines from a file object
-        message = next(self._socket)
+        '''Pull a message from our queue; blocking.'''
+        return self._recv_queue.get()
 
-        result = json.loads(message)
-
-        if "command" not in result:
-            raise BattlecodeError("Unknown result: "+str(result))
-
-        if result['command'] == 'error':
-            raise BattlecodeError(result["reason"])
-
-        return result
+    def _can_recv_more(self):
+        return not self._recv_queue.empty()
 
     def _finish(self, winner_id):
         self._socket.close()
@@ -839,8 +862,8 @@ class Game(object):
             if 'winner' in turn:
                 raise Exception('Game finished')
 
-            self.state._kill_entities(turn['dead'])
             self.state._update_entities(turn['changed'])
+            self.state._kill_entities(turn['dead'])
             self.state.map._update_sectors(turn['changedSectors'])
 
             self.state.turn = turn['turn'] + 1
@@ -861,10 +884,13 @@ class Game(object):
                             _TERM_END
                         ))
 
-            if turn['nextTeamID'] == self.state.my_team.id:
+            if turn['nextTeamID'] == self.state.my_team.id and not self._can_recv_more():
                 return
 
     def _submit_turn(self):
+        if self.state.turn in self._missed_turns:
+            self.state._action_queue = []
+            return
         self._send({
             'command': 'makeTurn',
             'turn': self.state.turn,

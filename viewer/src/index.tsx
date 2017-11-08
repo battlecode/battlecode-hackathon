@@ -12,6 +12,7 @@ import { TOP_BAR_HEIGHT } from './constants';
 import { RendererComponent } from './components/renderer';
 import { Stats } from './components/stats';
 import { Minimap } from './components/minimap';
+import { TopBar } from './components/topbar';
 
 require('purecss/build/pure.css');
 require('./style.css');
@@ -96,14 +97,19 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const renderer = () => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
-        return <div style={`position: relative; top: ${TOP_BAR_HEIGHT}px;`}>
-            <RendererComponent gameState={timelines.timelines[gameID].farthest}
-                key={gameID}
-                addUpdateListener={(cb) => updateCbs.push(cb)} />
-            <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
-                minimap test
-            {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
-        </div>
+        return (
+            <div>
+                <TopBar />
+                <div style={`position: relative;`}>
+                    <RendererComponent gameState={timelines.timelines[gameID].farthest}
+                        key={gameID}
+                        addUpdateListener={(cb) => updateCbs.push(cb)} />
+                    <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
+                        minimap test
+                {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
+                </div>
+            </div>
+        );
     } else {
         return 'bananas';
     }

@@ -1,5 +1,79 @@
 .pixelated {
     image-rendering: pixelated;
     image-rendering: -moz-pixelated;
+}
 
+@font-face {
+    font-family: "ourfont";
+    src: url("assets/Inky Thin Pixels.ttf") format("truetype");
+}
+
+.top-bar {
+    background-color: #DDD;
+}
+
+.timeline {
+    display: block;
+    height: 45px;
+    border-bottom: 5px solid black;
+}
+
+button {
+    float: left;
+    border: none;
+    border-bottom: 5px solid black;
+    color: #333;
+    height: 50px;
+    width: 150px;
+    font-size: 12pt;
+    font-family: "ourfont";
+}
+
+.red:hover, .red.active {
+    color: #F44336;
+    border-color: #F44336;
+}
+
+.green:hover, .green.active {
+    color: #8BC34A;
+    border-color: #8BC34A;
+}
+
+.blue:hover, .blue.active {
+    color: #2196F3;
+    border-color: #2196F3;
+}
+
+#timeline {
+    fill: #AAAAAA;
+}
+
+#cursor {
+    fill: #666666;
+}
+
+svg {
+    padding-left: 25px;
+}
+
+svg:hover #timeline {
+    fill: #8BC34A;
+}
+
+svg:hover #cursor {
+    fill: #2196F3;
+}
+
+.popup {
+    position: absolute;
+    z-index: 100000;
+    top: 75px;
+    height: 400px;
+    width: 400px;
+}
+
+.dialog {
+    border: 1px solid black;
+    padding: 5px;
+    background-color: #DDD;
 }

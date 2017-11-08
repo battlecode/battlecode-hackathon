@@ -17,6 +17,7 @@ RUN apt-get install -y php5-cli
 RUN apt-get install -y ruby
 RUN apt-get install -y python
 RUN apt-get install -y mono-xsp2 mono-xsp2-base
+RUN apt-get install rustc
 
 RUN apt-get install -y mono-vbnc
 RUN apt-get install -y npm

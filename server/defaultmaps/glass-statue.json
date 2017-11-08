@@ -1,0 +1,16 @@
+
+{
+    "version": "battlecode 2017 hackathon map",
+    "teamCount": 2,
+    "height": 1,
+    "width": 21,
+    "tiles": [
+        ["D","D","D","D","D","D","D","D","D","D","G","G","G","G","G","G","G","G","G","G","G"]
+    ],
+    "sectorSize": 7,
+    "entities": [
+        {"id": 0, "type": "statue",  "location": {"x":0, "y":1},  "teamID": 1, "hp": 10},
+        {"id": 1, "type": "statue",  "location": {"x":20, "y":1},  "teamID": 2, "hp": 10}
+    ]
+}
+

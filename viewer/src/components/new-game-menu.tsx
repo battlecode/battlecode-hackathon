@@ -2,14 +2,31 @@ import * as Inferno from 'inferno';
 import Component from 'inferno-component';
 
 interface Props extends Inferno.Props {
-    maps: String[];
+    maps: string[];
     createGame: (map: string) => void;
 }
 
-export class NewGameMenu extends Component<{}, {}> {
+interface State {
+    map?: string;
+}
+
+export class NewGameMenu extends Component<Props, State> {
+
+    state: State;
+
+    constructor(props: Props) {
+        super(props);
+        this.state = {};
+    }
+
+    onChange = (e: any) => {
+        this.state.map = e.target.value;
+    }
 
     onClick = () => {
-        this.props.createGame('blah');
+        if (this.state.map) {
+            this.props.createGame(this.state.map);
+        }
     }
 
     render() {
@@ -17,7 +34,7 @@ export class NewGameMenu extends Component<{}, {}> {
             <div className="dialog green">
                 <div>
                     Map:
-                    <select>
+                    <select onChange={this.onChange}>
                         {this.props.maps.map((map) => (
                             <option value={map}>{map}</option>
                         ))}

@@ -2,14 +2,31 @@ import * as Inferno from 'inferno';
 import Component from 'inferno-component';
 
 interface Props extends Inferno.Props {
-    replays: String[];
+    replays: string[];
     loadReplay: (replay: string) => void;
 }
 
-export class LoadGameMenu extends Component<{}, {}> {
+interface State {
+    replay?: string;
+}
+
+export class LoadGameMenu extends Component<Props, State> {
+
+    state: State;
+
+    constructor(props: Props) {
+        super(props);
+        this.state = {};
+    }
+
+    onChange = (e: any) => {
+        this.state.replay = e.target.value;
+    }
 
     onClick = () => {
-        this.props.createGame('blah');
+        if (this.state.replay) {
+            this.props.loadReplay(this.state.replay);
+        }
     }
 
     render() {
@@ -17,7 +34,7 @@ export class LoadGameMenu extends Component<{}, {}> {
             <div className="dialog blue">
                 <div>
                     Replay:
-                    <select>
+                    <select onChange={this.onChange}>
                         {this.props.replays.map((replay) => (
                             <option value={replay}>{replay}</option>
                         ))}

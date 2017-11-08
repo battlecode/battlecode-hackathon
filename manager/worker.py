@@ -86,8 +86,6 @@ def runGame(bots):
 	shutil.rmtree(workingPathA)
 	shutil.rmtree(workingPathB)
 
-#pull from queue
-
 try:
 	connect_str = "dbname='battlecode' user='postgres' host='localhost' port='5433'"
 	conn = psycopg2.connect(connect_str)

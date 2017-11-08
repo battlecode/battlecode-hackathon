@@ -8,6 +8,18 @@ import urllib.request
 import urllib.parse
 from sandbox import *
 import copy
+import psycopg2
+import sys
+import random
+import string
+import boto3
+import botocore
+
+def random_key(length):
+    key = ''
+    for i in range(length):
+        key += random.choice(string.ascii_letters + string.digits + string.digits)
+    return key
 
 def unpack(filePath, destinationFilePath):
 	tempPath = os.path.join(destinationFilePath, "bot")
@@ -59,9 +71,7 @@ def runGame(bots):
 			return
 		os.chmod(botPath, 0o777)
 		os.chmod(os.path.join(botPath, "run.sh"), 0o777)
-		runGameShellCommand = os.path.join(os.path.abspath(botPath), "run.sh")
-
-		print(runGameShellCommand)
+		runGameShellCommand = os.path.join(os.path.abspath(botPath), "run.sh") + " " + bots[index]['key']
 
 		sandboxes[index].start(runGameShellCommand)
 
@@ -77,14 +87,38 @@ def runGame(bots):
 
 #pull from queue
 
-bots = [{"userID": "userAID", "botID": "botAID", "path": "botA.zip"},{"userID": "userBID", "botID": "botBID", "path": "botB.zip"}]
+try:
+	connect_str = "dbname='battlecode' user='postgres' host='localhost' port='5433'"
+	conn = psycopg2.connect(connect_str)
+	c = conn.cursor()
+except Exception as e:
+    print("Uh oh, can't connect. Invalid dbname, user or password?")
+    sys.exit()
 
-commandLineOutputs = runGame(bots)
+BUCKET_NAME = 'battlecode-submissions-hackathon-2017-stage'
+s3 = boto3.resource('s3')
 
-for ouput in commandLineOutputs:
-	print(output)
+while True:
+	c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id WHERE status='queued' ORDER BY request_time DESC")
+	matches = c.fetchall()
 
-# Keep docker from crashing the system
+	if len(matches) < 1:
+		continue
+
+	match = matches[0]
+
+	print(match)
+
+	redKey, blueKey = random_key(20), random_key(20)
+	c.execute("UPDATE scrimmage_matches SET red_secret_key=%s, blue_secret_key=%s, status='running' WHERE id=%s",(redKey,blueKey,match[0]))
+
+	s3.Bucket(BUCKET_NAME).download_file(match[3], 'botA.zip')
+	s3.Bucket(BUCKET_NAME).download_file(match[4], 'botB.zip')
+
+	bots = [{"botID": match[1], "key":redKey, "path": "botA.zip"},{"botID": match[2], "key":blueKey, "path": "botB.zip"}]
+
+	runGame(bots)
+
 """
 os.system("sudo rm /run/network/ifstate.veth*")
 os.system("docker stop $(docker ps -a -q)")

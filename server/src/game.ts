@@ -200,7 +200,10 @@ export class Game {
     private getWinningTeam(): TeamID {
         let winningTeam = -1;
         for (var entity of this.entities.values()) {
-            if (winningTeam === -1) {
+            if (entity.teamID === 0) {
+                continue;
+            }
+            else if (winningTeam === -1) {
                 winningTeam = entity.teamID;
             }
             else if (winningTeam !== entity.teamID) {

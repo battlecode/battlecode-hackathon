@@ -30,7 +30,7 @@ const DELAYS = {
 
 const DAMAGES = {
     thrower: 4,
-    statue: 4,
+    statue: 1,
     recoil: 2,
     dirt: 1,
     fatigue: 1,
@@ -506,7 +506,7 @@ export class Game {
                 x: entity.location.x + action.dx,
                 y: entity.location.y + action.dy,
             },
-            hp: 10
+            hp: 1
         });
     }
 

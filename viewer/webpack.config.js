@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   entry: {
-    index: './src/index.ts'
+    index: './src/index.tsx'
   },
 
   output: {
@@ -14,7 +14,7 @@ module.exports = {
   module: {
     loaders: [
       {
-        test: /\.ts$/,
+        test: /\.tsx?$/,
         use: [
           {
             loader: 'babel-loader',
@@ -33,12 +33,13 @@ module.exports = {
             options: {}  
           }
         ]
-      }
+      },
+      { test: /\.css$/, loader: "style-loader!css-loader" }
     ]
   },
 
   resolve: {
-    extensions: ['.ts', '.js'],
+    extensions: ['.ts', '.tsx', '.js'],
     alias: {
       'three': path.join(__dirname, 'node_modules/three/build/three.module.js')
     }

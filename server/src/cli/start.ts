@@ -15,42 +15,42 @@ import * as path from 'path';
 export const command = 'start';
 export const describe = 'Run the game'
 export const builder = <any>{
-    'tcpPort': {
+    'tcp-port': {
         default: 6147,
         describe: 'TCP port to host games on',
         type: 'number'
     },
-    'wsPort': {
+    'ws-port': {
         default: 6148,
         describe: 'Websocket port to host games on',
         type: 'number'
     },
-    'unixSocket': {
+    'unix-socket': {
         default: /^win/.test(process.platform) ? undefined : '/tmp/battlecode.sock',
         describe: 'Unix raw socket to host games on',
         type: 'string'
     },
     'viewer': {
         default: true,
-        describe: 'Run the viewer',
+        describe: 'Run the viewer (--no-viewer to disable)',
         type: 'boolean'
     },
-    'viewerPort': {
+    'viewer-port': {
         default: 8080,
         describe: 'Port to host the viewer on',
         type: 'number'
     },
-    'viewerOpen': {
+    'viewer-open': {
         default: true,
-        describe: 'Open the viewer automatically (--no-viewer to disable)',
+        describe: 'Open the viewer automatically (--no-viewer-open to disable)',
         type: 'boolean'
     },
-    'viewerDev': {
+    'viewer-dev': {
         default: false,
         describe: 'Run viewer from adjacent development directory',
         type: 'boolean'
     },
-    'serverKey': {
+    'server-key': {
         describe: 'server password',
         type: 'string'
     }
@@ -71,11 +71,11 @@ export const handler = (options) => {
     engineLog('Starting the game engine...');
 
     let server = new Server({
-        tcpPort: options.tcpPort,
-        wsPort: options.wsPort,
-        unixSocket: options.unixSocket,
+        tcpPort: options['tcp-port'],
+        wsPort: options['ws-port'],
+        unixSocket: options['unix-socket'],
 
-        debug: options.debug,
+        debug: options['debug'],
         log: engineLog,
         error: engineError
     });
@@ -88,8 +88,8 @@ export const handler = (options) => {
     // we're in dist/src/cli/
     const distDir = path.dirname(path.dirname(__dirname));
 
-    if (options.viewer) {
-        if (options.viewerDev) {
+    if (options['viewer']) {
+        if (options['viewer-dev']) {
             viewerLog('Running viewer in debug mode...');
             let prefix = path.join(
                 path.dirname(path.dirname(distDir)),
@@ -107,7 +107,7 @@ export const handler = (options) => {
                 proc.kill();
             });
         } else {
-            viewerLog(`Serving viewer at localhost:${options.viewerPort}...`)
+            viewerLog(`Serving viewer at localhost:${options['viewer-port']}...`)
 
             const viewerDir = path.join(distDir, 'viewer');
 
@@ -121,14 +121,14 @@ export const handler = (options) => {
                 }).resume();
             }).listen(8080);
 
-            if (options.viewerOpen) {
-                viewerLog(`Opening http://localhost:${options.viewerPort}/ in your browser...`);
-                open(`http://localhost:${options.viewerPort}/`, (err) => {
+            if (options['viewer-open']) {
+                viewerLog(`Opening http://localhost:${options['viewer-port']}/ in your browser...`);
+                open(`http://localhost:${options['viewer-port']}/`, (err) => {
                     viewerError('Failed to open viewer in your browser.');
-                    viewerLog(`Please open http://localhost:${options.viewerPort}/ in your browser.`);
+                    viewerLog(`Please open http://localhost:${options['viewer-port']}/ in your browser.`);
                 });
             } else {
-                viewerLog(`Please open http://localhost:${options.viewerPort}/ in your browser.`);
+                viewerLog(`Please open http://localhost:${options['viewer-port']}/ in your browser.`);
             }
         }
     }

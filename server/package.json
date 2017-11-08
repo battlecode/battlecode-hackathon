@@ -1,8 +1,9 @@
 {
-  "name": "battlehack17",
+  "name": "@battlecode/battlehack17",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "battlehack": "dist/src/cli/cli.js"
   },
@@ -15,8 +16,8 @@
     "type": "git",
     "url": "git+https://github.com/kazimuth/battlecode-hackathon.git"
   },
-  "author": "",
-  "license": "GPL",
+  "author": "Teh Devs",
+  "license": "AGPL-3.0",
   "bugs": {
     "url": "https://github.com/kazimuth/battlecode-hackathon/issues"
   },

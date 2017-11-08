@@ -55,8 +55,8 @@ const getCredentials = async (server): Promise<Credentials> => {
              */
             console.log("Please enter your website login information:");
 
-            let username = await read({prompt: 'Username: '});
-            let password = await read({prompt: 'Password: ', silent: true});
+            let username = await read({ prompt: 'Username: ' });
+            let password = await read({ prompt: 'Password: ', silent: true });
 
             let creds = await axios.post(`${server}token`, {
                 grant_type: 'password',
@@ -89,7 +89,6 @@ const getCredentials = async (server): Promise<Credentials> => {
             return {token, expires};
         }
     }
-
 }
 
 export const handler = async (options) => {

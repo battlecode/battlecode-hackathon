@@ -5,7 +5,7 @@
 
 @font-face {
     font-family: "ourfont";
-    src: url("assets/Inky Thin Pixels.ttf") format("truetype");
+    src: url("assets/monofonto.ttf") format("truetype");
 }
 
 .top-bar {
@@ -14,7 +14,8 @@
 
 .timeline {
     display: block;
-    height: 45px;
+    height: 50px;
+    box-sizing: border-box;
     border-bottom: 5px solid black;
 }
 
@@ -23,23 +24,25 @@ button {
     border: none;
     border-bottom: 5px solid black;
     color: #333;
+    background-color: transparent;
     height: 50px;
     width: 150px;
     font-size: 12pt;
     font-family: "ourfont";
+    outline: none;
 }
 
-.red:hover, .red.active {
+button.red:hover, button.red.active {
     color: #F44336;
     border-color: #F44336;
 }
 
-.green:hover, .green.active {
+button.green:hover, button.green.active {
     color: #8BC34A;
     border-color: #8BC34A;
 }
 
-.blue:hover, .blue.active {
+button.blue:hover, button.blue.active {
     color: #2196F3;
     border-color: #2196F3;
 }
@@ -67,13 +70,53 @@ svg:hover #cursor {
 .popup {
     position: absolute;
     z-index: 100000;
-    top: 75px;
     height: 400px;
     width: 400px;
 }
 
 .dialog {
-    border: 1px solid black;
-    padding: 5px;
+    font-family: "ourfont";
+    border-size: 1px;
+    border-style: solid;
+    border: 2px solid black;
     background-color: #DDD;
+    border-bottom: none;
+    overflow: hidden;
+    box-sizing: border-box;
+    width: 300px;
+}
+
+.red.dialog {
+    border-color: #F44336;
+}
+
+.green.dialog {
+    border-color: #8BC34A;
+}
+
+.blue.dialog {
+    border-color: #2196F3;
+}
+
+select {
+    margin-left: 10px;
+    border: none;
+    outline: none;
+}
+
+.dialog button {
+    width: 100%;
+    box-sizing: border-box;
+    float: none;
+}
+
+.dialog div {
+    padding: 5px;
+}
+
+.dialog input {
+    padding: 5px;
+    overflow: visible;
+    outline: none;
+    border: none;
 }

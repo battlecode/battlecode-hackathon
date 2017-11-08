@@ -68,6 +68,9 @@ window['timelines'] = timelines;
 
 let updateCbs = new Array<() => void>();
 
+let maps: string[] = [];
+let replays: string[] = [];
+
 ws.onclose = (event) => {
     console.log('ws connection closed');
 };
@@ -77,6 +80,14 @@ ws.onopen = (event) => {
         command: "spectateAll"
     };
     ws.send(JSON.stringify(spectate));
+    const getMaps: schema.ListMapsRequest = {
+        command: "listMapsRequest"
+    };
+    ws.send(JSON.stringify(getMaps));
+    const getReplays: schema.ListReplaysRequest = {
+        command: "listReplaysRequest"
+    };
+    ws.send(JSON.stringify(getReplays));
 }
 ws.onerror = (err) => {
     console.log('ws error: ', err);
@@ -84,12 +95,35 @@ ws.onerror = (err) => {
 ws.onmessage = (message) => {
     // TODO validate?
     let command = JSON.parse(message.data) as schema.OutgoingCommand;
+    if (command.command === "listMapsResponse") {
+        maps = command.mapNames;
+    }
+    if (command.command === "listReplaysResponse") {
+        replays = command.replayNames;
+    }
     timelines.apply(command);
     for (let cb of updateCbs) {
         cb();
     }
     render();
 };
+
+const createGame = (map: string) => {
+    const create: schema.CreateGame = {
+        command: "createGame",
+        map: map,
+        sendReplay: true,
+    };
+    ws.send(JSON.stringify(create));
+}
+
+const loadReplay = (replay: string) => {
+    const load: schema.ReplayRequest = {
+        command: "replayRequest",
+        name: replay,
+    };
+    ws.send(JSON.stringify(load));
+}
 
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());
@@ -99,14 +133,14 @@ const renderer = () => {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
         return (
             <div>
-                <TopBar />
+                <TopBar maps={maps} createGame={createGame} replays={replays} loadReplay={loadReplay} />
                 <div style={`position: relative;`}>
                     <RendererComponent gameState={timelines.timelines[gameID].farthest}
-                        key={gameID}
-                        addUpdateListener={(cb) => updateCbs.push(cb)} />
+                                       key={gameID}
+                                       addUpdateListener={(cb) => updateCbs.push(cb)} />
                     <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
                         minimap test
-                {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
+                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
                 </div>
             </div>
         );

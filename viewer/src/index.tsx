@@ -5,6 +5,7 @@ import ReconnectingWebSocket from 'reconnectingwebsocket';
 import { frameDebounce } from './util/framedebounce';
 import * as Inferno from 'inferno';
 import Component from 'inferno-component';
+import "babel-polyfill";
 
 import * as schema from './schema';
 import * as state from './state';
@@ -156,7 +157,8 @@ const renderer = () => {
                         addUpdateListener={(cb) => updateCbs.push(cb)} />
                     <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
                         minimap test
-                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
+                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}
+                    </div>
                 </div>
             </div>
         );

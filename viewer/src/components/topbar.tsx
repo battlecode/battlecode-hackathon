@@ -44,9 +44,6 @@ export class TopBar extends Component<{}, State> {
     }
 
     render() {
-        console.log(this.props.currentRound);
-        console.log(this.props.farthestRound);
-
         return (
             <div class="top-bar" style={`height: ${TOP_BAR_HEIGHT}px;`}>
                 <div style="height: 5px; width: 25px; float: left;" />

@@ -125,6 +125,13 @@ const loadReplay = (replay: string) => {
     ws.send(JSON.stringify(load));
 }
 
+const timelineChangeRound = (round: number) => {
+    if (timelines.gameIDs.length > 0) {
+        let gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
+        timelines.timelines[gameID].load(round);
+    }
+}
+
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());
 
@@ -133,11 +140,20 @@ const renderer = () => {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
         return (
             <div>
-                <TopBar maps={maps} createGame={createGame} replays={replays} loadReplay={loadReplay} />
+                <TopBar
+                    maps={maps}
+                    createGame={createGame}
+                    replays={replays}
+                    loadReplay={loadReplay}
+                    currentRound={timelines.timelines[gameID].current.turn}
+                    farthestRound={timelines.timelines[gameID].farthest.turn}
+                    maxRound={1000}
+                    changeRound={timelineChangeRound}
+                />
                 <div style={`position: relative;`}>
                     <RendererComponent gameState={timelines.timelines[gameID].farthest}
-                                       key={gameID}
-                                       addUpdateListener={(cb) => updateCbs.push(cb)} />
+                        key={gameID}
+                        addUpdateListener={(cb) => updateCbs.push(cb)} />
                     <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
                         minimap test
                         {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>

@@ -56,7 +56,7 @@ button.blue:hover, button.blue.active {
 }
 
 svg {
-    padding-left: 25px;
+    margin-left: 25px;
 }
 
 svg:hover #timeline {
@@ -100,7 +100,6 @@ svg:hover #cursor {
 
 select {
     margin-left: 10px;
-    border: none;
     outline: none;
 }
 
@@ -118,5 +117,4 @@ select {
     padding: 5px;
     overflow: visible;
     outline: none;
-    border: none;
 }

@@ -128,7 +128,7 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
                 <br/>
                 hp: {data.hp}
                 <br/>
-                cooldown: {(data.cooldownEnd || this.props.gameState.turn) - this.props.gameState.turn}
+                cooldown: {Math.max((data.cooldownEnd || this.props.gameState.turn) - this.props.gameState.turn, 0)}
             </div>;
         } else {
             return <div />

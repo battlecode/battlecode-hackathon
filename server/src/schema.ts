@@ -307,8 +307,10 @@ export interface Keyframe {
 export interface GameStatusUpdate {
     command: "gameStatusUpdate";
     gameID: GameID;
-    connected: number;
+    // team names
+    connected: string[];
     status: "lobby" | "running" | "finished" | "cancelled";
+    map: string;
 }
 
 ///////////////////

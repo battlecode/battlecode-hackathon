@@ -141,8 +141,9 @@ export class Lobby {
         this.status = {
             command: "gameStatusUpdate",
             gameID: this.id,
-            connected: 0,
-            status: "lobby"
+            connected: [],
+            status: "lobby",
+            map: this.map.mapName || 'UNKNOWN????????'
         }
         Client.sendToAll(this.status, this.spectators);
     }
@@ -189,7 +190,7 @@ export class Lobby {
                 team: newTeam.teamID,
                 id: this.id
             }, this.observers);
-            this.status.connected++;
+            this.status.connected.push(newTeam.name);
             Client.sendToAll(this.status, this.spectators);
 
             if (this.requiredTeams.length == 0) {
@@ -224,7 +225,7 @@ export class Lobby {
                 // client was playing, we need to shutdown now
 
                 this.status.status = "cancelled";
-                this.status.connected = 0;
+                this.status.connected = [];
                 Client.sendToAll(this.status, this.spectators);
                 return true;
             }
@@ -428,7 +429,7 @@ export class GameRunner {
                 clearTimeout(this.timeoutHandle);
             }
             this.status.status = "cancelled";
-            this.status.connected = 0;
+            this.status.connected = [];
             Client.sendToAll(this.status, this.spectators);
             return true;
         }

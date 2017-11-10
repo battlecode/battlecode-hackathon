@@ -94,7 +94,7 @@ ws.onmessage = (message) => {
         currentGameID = command.gameID;
         isPlaying = true;
     }
-    timelines.apply(command);
+    timelines.apply(command, addNewGame);
     for (let cb of updateCbs) {
         cb();
     }
@@ -162,7 +162,7 @@ const togglePlaybackRate = () => {
     render();
 }
 
-const getCloseActiveGame = (gameID: schema.GameID) => (() => {
+export const getCloseActiveGame = (gameID: schema.GameID) => (() => {
     delete activeGames[gameID];
     if (gameID == currentGameID) {
         if (Object.keys(activeGames).length > 0) {
@@ -173,9 +173,18 @@ const getCloseActiveGame = (gameID: schema.GameID) => (() => {
     }
 });
 
-const getViewActiveGame = (gameID: schema.GameID) => (() => {
+export const getViewActiveGame = (gameID: schema.GameID) => (() => {
     currentGameID = gameID;
 });
+
+const addNewGame = (gameInfo: ActiveGameInfo) => {
+    const gameID = gameInfo.gameID;
+    if (!(gameID in activeGames)) {
+        activeGames[gameID] = gameInfo;
+    }
+    currentGameID = gameID;
+    isPlaying = true;
+}
 
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());

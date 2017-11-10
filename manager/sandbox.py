@@ -11,6 +11,7 @@ from threading import Thread
 import socket
 import fcntl
 import struct
+import shutil
 
 def get_ip_address(ifname):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -64,17 +65,13 @@ def _guard_monitor(jail):
         elif msg == "SIGNALED":
             jail.resp_queue.put((time, data))
 
+
 def _monitor_file(fd, q):
-    print("Start monitor")
+    #print("Start monitor")
     while True:
         line = fd.readline()
-        print(line)
-        if not line:
-            q.put(None)
-            break
-        line = unicode(line, errors="replace")
-        line = line.rstrip('\r\n')
-        q.put(line)
+        if len(line.strip())==64:
+            q.put(line.strip()) 
 
 class Sandbox:
 
@@ -103,10 +100,8 @@ class Sandbox:
         return False
 
     def start(self, shell_command):
-        print("HELLO WORLD")
-                """Start a command running in the sandbox"""
         shell_command = "docker run -d -v "+self.working_directory+":"+self.working_directory+" --privileged=true 8ace9c5ae439 sh -c \'" + shell_command + " " + self.docker_ip + " \'"
-        print(shell_command)
+        #print(shell_command)
 
         if self.is_alive:
             raise SandboxError("Tried to run command with one in progress.")
@@ -142,13 +137,16 @@ class Sandbox:
         suddenly terminated.
 
         """
-        if self.is_alive:
-            try:
-                self.command_process.kill()
-            except OSError:
-                pass
-            self.command_process.wait()
-            self.child_queue.put(None)
+        
+        key = self.stdout_queue.get(block=True, timeout=10)
+        os.system("docker container kill " + key + " > /dev/null")
+        try:
+            self.command_process.kill()
+        except OSError:
+            print("error killing")
+        self.command_process.wait()
+        self.child_queue.put(None)
+        shutil.rmtree(self.working_directory)
 
     def retrieve(self):
         """Copy the working directory back out of the sandbox."""

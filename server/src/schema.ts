@@ -301,11 +301,16 @@ export interface Keyframe {
     teams: TeamData[];
 }
 
+/**
+ * Used by the viewer;
+ */
 export interface GameStatusUpdate {
+    command: "gameStatusUpdate";
     gameID: GameID;
-    teams: TeamData[];
-    connected: boolean[];
-    winner?: TeamData;
+    // team names
+    connected: string[];
+    status: "lobby" | "running" | "finished" | "cancelled";
+    map: string;
 }
 
 ///////////////////
@@ -350,7 +355,7 @@ export interface CreateGame {
      * Timeout for each turn, in milliseconds.
      * If you don't want a timeout, just set it really high.
      */
-    timeoutMS: number;
+    timeoutMS?: number;
 }
 
 export interface CreateGameConfirm {
@@ -421,7 +426,7 @@ export interface GameReplay {
 
 export interface PlayerConnected {
     command: "playerConnected",
-
+    id: GameID;
     team: TeamID;
 }
 
@@ -461,4 +466,4 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
 export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
     ListReplaysRequest | ReplayRequest;
 export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | MissedTurn | ErrorCommand | Keyframe |
-    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse | PlayerConnected | CreateGameConfirm;
+    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse | PlayerConnected | CreateGameConfirm | GameStatusUpdate;

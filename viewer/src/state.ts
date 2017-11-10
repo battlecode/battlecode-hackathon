@@ -94,10 +94,13 @@ export class Timeline {
     loadLock: Mutex = new Mutex();
     async load(turn: number) {
         if (turn > this.deltas.length) throw new Error("out of range: "+turn);
+        console.log("loading turn " + turn);
 
         let lock = await this.loadLock.acquire();
         let previous = turn;
         while (this.snapshots[previous] === undefined) previous--;
+        console.log(previous);
+        this.current = clone(this.snapshots[previous]);
         while (this.current.turn < turn) {
             // async, don't block the ui thread
             if (this.current.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));

@@ -139,6 +139,8 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const renderer = () => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
+        console.log(timelines.timelines[gameID].current);
+        console.log(timelines.timelines[gameID].farthest);
         return (
             <div>
                 <TopBar
@@ -152,12 +154,12 @@ const renderer = () => {
                     changeRound={timelineChangeRound}
                 />
                 <div style={`position: relative;`}>
-                    <RendererComponent gameState={timelines.timelines[gameID].farthest}
+                    <RendererComponent gameState={timelines.timelines[gameID].current}
                         key={gameID}
                         addUpdateListener={(cb) => updateCbs.push(cb)} />
                     <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
                         minimap test
-                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}
+                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].current} />)}
                     </div>
                 </div>
             </div>

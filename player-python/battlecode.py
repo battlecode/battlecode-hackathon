@@ -373,7 +373,6 @@ class Entity(object):
             return
 
         self.hp -= damage
-        print(self.hp, self.id)
         if(self.hp>0):
             return
 
@@ -434,7 +433,6 @@ class Entity(object):
                         target_loc.y + direction.dy)
 
             target = self._state.map._occupied.get(target_loc, None)
-            print(target)
             if(target != None):
                 target._deal_damage(THROW_ENTITY_DAMAGE)
                 held._deal_damage(THROW_ENTITY_RECOIL)
@@ -442,11 +440,8 @@ class Entity(object):
             landing_location = Location(target_loc.x - direction.dx, \
                                         target_loc.y - direction.dy)
             held.location = landing_location
-            print(self._state.map.tile_at(landing_location))
             if self._state.map.tile_at(landing_location)  == DIRT:
                 held._deal_damage(THROW_ENTITY_DIRT)
-            else:
-                print("Didn't land on dirt")
             if not held.disintegrated:
                 self._state.map._occupied[landing_location] = held
             held.held_by = None
@@ -796,6 +791,8 @@ class Game(object):
 
         self._recv_queue = Queue()
 
+        self._missed_turns = set()
+
         commThread = threading.Thread(target=self._recv_thread, name='Battlecode Communication Thread')
         commThread.daemon = True
         commThread.start()
@@ -822,8 +819,6 @@ class Game(object):
         self.state = State(self, teams, self.my_team_id, initialState)
 
         self.winner = None
-
-        self._missed_turns = set()
 
         # wait for our first turn
         # TODO: run messaging logic on another thread?
@@ -854,11 +849,11 @@ class Game(object):
             result = json.loads(message)
 
             if "command" not in result:
+                self._recv_queue.put(None)
                 raise BattlecodeError("Unknown result: "+str(result))
-                sys.exit(1)
             elif result['command'] == 'error':
+                self._recv_queue.put(None)
                 raise BattlecodeError(result['reason'])
-                sys.exit(1)
             elif result['command'] == 'missedTurn':
                 sys.stderr.write('Battlecode warning: missed turn {}, speed up your code!\n'.format(result['turn']))
                 self._missed_turns.add(result['turn'])
@@ -902,7 +897,6 @@ class Game(object):
                 continue
 
             assert turn['command'] == 'nextTurn'
-            print(turn)
 
             self.state._update_entities(turn['changed'])
             self.state._kill_entities(turn['dead'])
@@ -918,12 +912,10 @@ class Game(object):
                 if turn['lastTeamID'] == self.state.my_team.id:
                     # handle what happened last turn
                     for action, reason in zip(turn['failed'], turn['reasons']):
-                        print('{}failed: {}:{} reason: {}{}'.format(
-                            _TERM_RED,
+                        print('failed: {}:{} reason: {}'.format(
                             action['id'],
                             action['action'],
                             reason,
-                            _TERM_END
                         ))
 
             if turn['nextTeamID'] == self.state.my_team.id and not self._can_recv_more():
@@ -960,7 +952,6 @@ class Game(object):
                     speculative._game = self
                     self.state._game = self
                     yield speculative
-                    print(self.state._action_queue)
                 else:
                     yield self.state
 

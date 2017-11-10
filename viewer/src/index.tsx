@@ -94,7 +94,9 @@ ws.onmessage = (message) => {
         currentGameID = command.gameID;
         isPlaying = true;
     }
-    timelines.apply(command, addNewGame);
+    if (command.command != "gameReplay") {
+        timelines.apply(command, addNewGame);
+    }
     for (let cb of updateCbs) {
         cb();
     }
@@ -108,7 +110,6 @@ const createGame = (map: string) => {
         sendReplay: true,
         timeoutMS: 100,
     };
-    console.log("creating game");
     ws.send(JSON.stringify(create));
 }
 
@@ -135,7 +136,7 @@ const updateCurrentFrame = (time: number) => {
     const updateInterval = 1000 / turnsPerSecond;
     const thisInterval = time - lastUpdateTime;
     const numTurns = (thisInterval / updateInterval);
-    
+
     const end = () => {
         lastUpdateTime = time - (thisInterval % updateInterval);
         render();
@@ -146,7 +147,7 @@ const updateCurrentFrame = (time: number) => {
         const timeline = timelines.timelines[currentGameID];
         const turnToLoad = Math.min(timeline.current.turn + Math.floor(numTurns), timeline.farthest.turn);
         const numTurnsToLoad = turnToLoad - timeline.current.turn;
-        if (turnToLoad >= 0) {
+        if (numTurnsToLoad > 0) {
             timelines.timelines[currentGameID].loadNextNTurns(numTurnsToLoad, end);
         } else {
             end();

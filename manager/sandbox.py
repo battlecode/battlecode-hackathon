@@ -146,6 +146,8 @@ class Sandbox:
             print("error killing")
         self.command_process.wait()
         self.child_queue.put(None)
+        
+        print(self.working_directory)
         shutil.rmtree(self.working_directory)
 
     def retrieve(self):

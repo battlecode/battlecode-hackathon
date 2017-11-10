@@ -40,9 +40,6 @@ for state in game.turns():
         for direction in battlecode.Direction.directions():
             if entity.can_move(direction):
                 entity.queue_move(direction)
-    print(list(state.get_entities(entity_type=battlecode.HEDGE)))
-    print(list(state.get_entities(team=state.my_team,
-        entity_type=battlecode.THROWER)))
 
 end = time.clock()
 print('clock time: '+str(end - start))

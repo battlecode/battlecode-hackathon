@@ -149,3 +149,9 @@ span.red {
 span.blue {
     color: #2196F3;
 }
+
+p {
+    font-family: "ourfont";
+    padding: 25px;
+    color: #333
+}

@@ -206,7 +206,11 @@ const renderer = () => {
                                         key={currentGameID}
                                         addUpdateListener={(cb) => updateCbs.push(cb)} />
                  </div>
-            ) : null}
+            ) : (
+                 <p>
+                     Welcome to the Battlehack Client! To begin, start a new game, or load an existing replay, using the above interface.
+                 </p>
+            )}
         </div>
     );
 }

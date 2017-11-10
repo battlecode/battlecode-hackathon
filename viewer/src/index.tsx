@@ -129,7 +129,7 @@ const loadReplay = (replay: string) => {
 const timelineChangeRound = (round: number) => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
-        timelines.timelines[gameID].load(round);
+        timelines.timelines[gameID].load(round, render);
     }
 }
 
@@ -139,8 +139,6 @@ document.addEventListener('contextmenu', event => event.preventDefault());
 const renderer = () => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
-        console.log(timelines.timelines[gameID].current);
-        console.log(timelines.timelines[gameID].farthest);
         return (
             <div>
                 <TopBar

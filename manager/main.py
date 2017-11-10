@@ -247,9 +247,14 @@ while True:
 	bucket.download_file(queuedGame[3], 'botA.zip')
 	bucket.download_file(queuedGame[4], 'botB.zip')
 
+    maps = []
+    for mapID in queuedGame[7]:
+        c.execute("SELECT name from scrimmage_maps WHERE id=%s",(mapID))
+        maps.append(c.fetchone)
+
 	matches = []
 	teams = [{"name":queuedGame[5],"key":None,"db_id":queuedGame[1]},{"name":queuedGame[6],"key":None,"db_id":queuedGame[2]}]
-	for index, map in enumerate(queuedGame[7]):
+	for index, map in enumerate(maps):
 		redKey, blueKey = random_key(20), random_key(20)
 		bots = [{"botID": queuedGame[1], "key":redKey, "path": "botA.zip"},{"botID": queuedGame[2], "key":blueKey, "path": "botB.zip"}]
 
@@ -257,7 +262,7 @@ while True:
 		teams[1].key = blueKey
 
 		ng_id = startGame(teams,map)
-		print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + ".")
+		print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + " on " + map + ".")
 		matches.append({"ng_id":ng_id,"sandboxes":runGame(bots),"connected":[False,False],"replay_data":None,"winner":None})
 
 	running_games.append({'db_id':queuedGame[0],'start':datetime.datetime.now(),'teams':teams,'matches':matches})

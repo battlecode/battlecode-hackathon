@@ -183,11 +183,6 @@ export class Game {
             this.validate();
         }
 
-        if (turn > 1000) {
-            // TODO this is wrong
-            diff.winnerID = 1;
-        }
-
         let winningTeam = this.getWinningTeam();
         if (winningTeam > 0) {
             diff.winnerID = winningTeam;
@@ -211,8 +206,80 @@ export class Game {
                 break;
             }
         }
+        if (this.turn > 1000 && winningTeam < 0) {
+            winningTeam = this.breakTie();
+        }
 
         return winningTeam;
+    }
+
+    // Breaks tie in order of: 
+    //  1) Most entities on map
+    //  2) Most controlled sectors
+    //  3) Random number generator
+    private breakTie(): TeamID {
+        let winningTeamID: TeamID = -1;
+        
+        // Check for team with highest # of entities on map
+        let entries: TeamID[] = [];
+        for (var entity of this.entities.values()) {
+            entries.push(entity.teamID);
+        }
+        winningTeamID = this.getTeamIDWithHighestNumberOfEntries(entries);
+
+        // Check for team with highest # of controlled sectors
+        if (winningTeamID < 0) {
+            let entries: TeamID[] = [];
+            for (var sector of this.sectors.values()) {
+                entries.push(sector.getControllingTeamID());
+            }
+            winningTeamID = this.getTeamIDWithHighestNumberOfEntries(entries);
+        }
+
+        // Generate random winning team
+        if (winningTeamID < 0) {
+            winningTeamID = Math.floor(Math.random()*(this.teams.length-2)+1);
+        }
+        
+        return winningTeamID;
+    }
+
+    // return TeamID with highest number of entries, -1 if there are more than 1 team with highest
+    private getTeamIDWithHighestNumberOfEntries(entries: TeamID[]) {
+        let winningTeamID = -1;
+        var teams: Map<TeamID, number> = new Map();
+        
+        for (var teamID of entries) {
+            // ignore neutral team (teamID == 0) 
+            if (teamID === 0) {
+                continue;
+            }
+
+            let count = teams.get(teamID);
+            if (count === undefined) {
+                count = 1;
+            }
+            else {
+                count++;
+            }
+            teams.set(teamID, count)
+        }
+        for (var teamID of teams.keys()) {
+            var team = teams.get(teamID);
+            let highest = teams.get(winningTeamID);
+            let current = teams.get(teamID) as number;
+            
+            if (highest === undefined) {
+                winningTeamID = teamID;
+            }
+            else if (highest === current) {
+                winningTeamID = -1;
+            }
+            else if (highest < current) {
+                winningTeamID = teamID;
+            }
+        }
+        return winningTeamID;
     }
 
     private makeNextTurn(): NextTurn {
@@ -412,7 +479,6 @@ export class Game {
     }
 
     private doPickup(entity: Entity, action: PickupAction): FastError {
-        // TODO: deduct hp from entity if it holds an entity for too long
         var pickup = this.getEntity(action.pickupID);
         if (typeof pickup === 'string') return pickup;
 

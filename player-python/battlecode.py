@@ -745,10 +745,7 @@ class State(object):
                 continue
             yield entity
 
-if os.name == 'nt':
-    DEFAULT_SERVER = ('localhost', 6147)
-else:
-    DEFAULT_SERVER = '/tmp/battlecode.sock'
+DEFAULT_SERVER = ('localhost', 6147)
 
 class Game(object):
     '''A game that's currently running.'''

@@ -1,15 +1,16 @@
 import { SectorData, EntityID, EntityData, TeamID, Location } from './schema';
 
-export class Sector{
+export class Sector {
     teams: Map<TeamID, EntityID[]>;
-    top_left: Location;
-    controlling_team: TeamID;
+    topLeft: Location;
+    controllingTeam: TeamID;
     hasChanged: boolean;
 
-    constructor(top_left: Location) {
+    constructor(topLeft: Location) {
        this.teams = new Map();
-       this.top_left = top_left;
-       this.controlling_team = -1;
+       this.topLeft = topLeft;
+       // by default, 'neutral' controls this sector
+       this.controllingTeam = 0;
        this.hasChanged = false;
     }
 
@@ -32,7 +33,7 @@ export class Sector{
     }
 
     addStatue(statue: EntityData) {
-       var team = this.getOrCreateTeam(statue.team);
+       var team = this.getOrCreateTeam(statue.teamID);
        if (team.indexOf(statue.id) > -1) {
            throw new Error("Statue already exists in Sector"+statue.id);
        }
@@ -41,7 +42,8 @@ export class Sector{
     }
 
     deleteStatue(statue: EntityData) {
-        var team = this.getTeam(statue.team); 
+        
+        var team = this.getTeam(statue.teamID); 
         var index = team.indexOf(statue.id);
         if (index < 0) {
             throw new Error("Can't delete nonexistent statue from sector"+statue.id);
@@ -54,15 +56,14 @@ export class Sector{
     * returns id of team controlling sector or -1 if no team controlling
     */
     getControllingTeamID(): TeamID {
-        var control = -1;
+        var control = 0;
         for (var teamID of this.teams.keys()) {
             var team = this.getTeam(teamID);
             if (team.length > 0) {
-                if (control < 0) {
+                if (control == 0) {
                     control = teamID;
-                }
-                else {
-                    control = -1;
+                } else {
+                    control = 0;
                     break;
                 }
             }
@@ -71,9 +72,9 @@ export class Sector{
     }
     
     updateControllingTeam() {
-        var new_controlling_team = this.getControllingTeamID()
-        if (this.controlling_team != new_controlling_team) {
-            this.controlling_team = new_controlling_team;
+        var newControllingTeam = this.getControllingTeamID()
+        if (this.controllingTeam != newControllingTeam) {
+            this.controllingTeam = newControllingTeam;
             this.hasChanged = true;
         }
     }
@@ -90,17 +91,17 @@ export class Sector{
     }
 
     /**
-    * returns id of oldest statue from team, or -1 if no statue exists
-    * oldest statue is statue with lowest id 
-    */
-    getOldestStatueID(team: TeamID): EntityID {
-        var oldest: EntityID = -1; 
+     * returns id of oldest statue from team, or -1 if no statue exists
+     * oldest statue is statue with lowest id 
+     */
+    getOldestStatueID(team: TeamID): EntityID | undefined {
         if (!this.teams.has(team)) {
-            return oldest;
+            return undefined;
         }
 
+        var oldest: EntityID | undefined = undefined;
         for (var statue of this.getTeam(team)) {
-            if (oldest == -1 || statue < oldest) {
+            if (oldest === undefined || statue < oldest) {
                 oldest = statue;
             }
         }
@@ -108,16 +109,16 @@ export class Sector{
     }
     
     /**
-    * returns id of spawning statue from controlling team or -1 if no team controlling
+    * returns id of spawning statue from controlling team, if one exists
     */
-    getSpawningStatueID(): EntityID {
-        return this.getOldestStatueID(this.controlling_team);
+    getSpawningStatueID(): EntityID | undefined {
+        return this.getOldestStatueID(this.controllingTeam);
     }
 
     static getSectorData(sector: Sector): SectorData {
         var data: SectorData = {
-            top_left: sector.top_left,
-            controlling_team: sector.controlling_team
+            topLeft: sector.topLeft,
+            controllingTeamID: sector.controllingTeam
         }
         return data
     }

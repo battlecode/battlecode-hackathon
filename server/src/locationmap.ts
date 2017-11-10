@@ -64,37 +64,48 @@ export default class LocationMap<T> {
     /**
      * Iterate through the values in the map.
      */
-    *values(): IterableIterator<T> {
+    values(): Array<T> {
+        let result = new Array<T>();
         for (let i = 0; i < this.width; i++) {
             for (let j = 0; j < this.height; j++) {
                 let v = this.get(i,j);
                 if (v !== undefined) {
-                    yield v;
+                    result.push(v);
                 }
             }
         }
+        return result;
     }
 
     /**
      * Iterate through the (set) keys in the map.
      */
-    *keys(): IterableIterator<Location> {
+    keys(): Array<Location> {
+        let result = new Array<Location>();
         for (let x = 0; x < this.width; x++) {
             for (let y = 0; y < this.height; y++) {
                 if (this.items[y * this.width + x] !== undefined) {
-                    yield { x: x, y: y};
+                    result.push({ x: x, y: y});
                 }
             }
         }
+        return result;
     }
 
     /**
      * Iterate through the entries in the map.
      */
-    *entries(): IterableIterator<[Location,T]> {
-        for (const key of this.keys()) {
-            yield [key, <T>this.get(key.x, key.y)];
+    entries(): Array<[Location,T]> {
+        let result = new Array<[Location, T]>();
+        for (let i = 0; i < this.width; i++) {
+            for (let j = 0; j < this.height; j++) {
+                let v = this.get(i,j);
+                if (v !== undefined) {
+                    result.push([{x: i, y: j}, v]);
+                }
+            }
         }
+        return result;
     }
 }
 

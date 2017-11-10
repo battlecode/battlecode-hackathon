@@ -1,7 +1,13 @@
 {
     "presets": [
         ["env", {
-            "modules": false
+            "modules": false,
+            "targets": {
+                "browsers": ["last 2 versions"]
+            }
         }]
+    ],
+    "plugins": [
+        ["babel-plugin-inferno", {"imports": true}]
     ]
 }

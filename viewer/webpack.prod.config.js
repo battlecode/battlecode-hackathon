@@ -1,6 +1,7 @@
 const path = require('path');
 const BabelMinifyPlugin = require('babel-minify-webpack-plugin');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 const webpack = require('webpack');
 
 // dev settings
@@ -16,7 +17,7 @@ dev.plugins = dev.plugins.concat([
       'NODE_ENV': JSON.stringify('production')
     }
   }),
-  new webpack.optimize.UglifyJsPlugin({
+  new UglifyJsPlugin({
     uglifyOptions: {
       ecma: 7,
       warnings: true

@@ -21,7 +21,7 @@ cd ..
 echo '\nstarting players\n'
 cd player-python
 child python3 testplayer.py
-python3 testplayer.py
+python3 -m cProfile -o prof.log testplayer.py
 cd ..
 
 #cd player-rust

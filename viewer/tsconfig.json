@@ -11,8 +11,8 @@
       "sourceMap": true,
       "types": [],
       "strictNullChecks": true,
-      "noImplicitAny": true,
-      "allowJs": true
+      "allowJs": true,
+      "jsx": "preserve"
     },
     "exclude": [
       "node_modules",

@@ -385,7 +385,8 @@ class Entity(object):
             return
 
         self.hp -= damage
-        if(self.hp >0):
+        print(self.hp, self.id)
+        if(self.hp>0):
             return
 
         if self.held_by == None:
@@ -434,7 +435,7 @@ class Entity(object):
             target_loc = Location(initial.x+direction.dx, \
                     initial.y+direction.dy)
 
-            for i in range(THROW_RANGE):
+            for i in range(THROW_RANGE+1):
                 on_map = self._state.map.location_on_map(target_loc)
                 is_occupied = target_loc in self._state.map._occupied
 
@@ -445,6 +446,7 @@ class Entity(object):
                         target_loc.y + direction.dy)
 
             target = self._state.map._occupied.get(target_loc, None)
+            print(target)
             if(target != None):
                 target._deal_damage(THROW_ENTITY_DAMAGE)
                 held._deal_damage(THROW_ENTITY_RECOIL)
@@ -452,8 +454,11 @@ class Entity(object):
             landing_location = Location(target_loc.x - direction.dx, \
                                         target_loc.y - direction.dy)
             held.location = landing_location
+            print(self._state.map.tile_at(landing_location))
             if self._state.map.tile_at(landing_location)  == DIRT:
                 held._deal_damage(THROW_ENTITY_DIRT)
+            else:
+                print("Didn't land on dirt")
             if not held.disintegrated:
                 self._state.map._occupied[landing_location] = held
             held.held_by = None
@@ -604,7 +609,7 @@ class Map(object):
 
     def tile_at(self, location):
         '''Get the tile at a location.'''
-        return self.tiles[location.y][location.x]
+        return self.tiles[len(self.tiles)-location.y-1][location.x]
 
     def location_on_map(self, location):
         if __debug__:
@@ -855,8 +860,10 @@ class Game(object):
 
             if "command" not in result:
                 raise BattlecodeError("Unknown result: "+str(result))
+                sys.exit(1)
             elif result['command'] == 'error':
                 raise BattlecodeError(result['reason'])
+                sys.exit(1)
             elif result['command'] == 'missedTurn':
                 sys.stderr.write('Battlecode warning: missed turn {}, speed up your code!\n'.format(result['turn']))
                 self._missed_turns.add(result['turn'])
@@ -898,6 +905,7 @@ class Game(object):
                 continue
 
             assert turn['command'] == 'nextTurn'
+            print(turn)
 
             self.state._update_entities(turn['changed'])
             self.state._kill_entities(turn['dead'])
@@ -955,6 +963,7 @@ class Game(object):
                     speculative._game = self
                     self.state._game = self
                     yield speculative
+                    print(self.state._action_queue)
                 else:
                     yield self.state
 

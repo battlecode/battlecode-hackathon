@@ -853,7 +853,7 @@ class Game(object):
                 raise BattlecodeError("Unknown result: "+str(result))
             elif result['command'] == 'error':
                 if result['reason'].startswith('wrong turn'):
-                    sys.stderr.write('Battlecode warning: missed turn, speed up your code!\n'.format(result['turn']))
+                    sys.stderr.write('Battlecode warning: missed turn, speed up your code!\n')
                 else:
                     raise BattlecodeError(result['reason'])
             elif result['command'] == 'missedTurn':

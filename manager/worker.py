@@ -21,6 +21,7 @@ import json
 import datetime
 import _thread
 import config
+import base64
 
 running_games = []
 sneak = {'ng_id':None,'DB_BEING_USED':False}
@@ -28,7 +29,7 @@ sneak = {'ng_id':None,'DB_BEING_USED':False}
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
-MAX_GAMES = 2
+MAX_GAMES = 4
 INIT_TIME = 60
 
 ELO_K = 20
@@ -121,8 +122,12 @@ def endGame(game,sneak):
         if replay is None:
             keys.append("none")
             continue
-        keys.append("replays/" + random_key(20) + ".bch17")
-        bucket.put_object(Key=keys[-1], Body=replay)
+        
+        keys.append("replays/" + random_key(20) + ".bch18")
+
+        bucket.put_object(Key=keys[-1], Body=base64.b64decode(replay), ACL='public-read')
+ 
+        keys[-1] = "https://s3.amazonaws.com/battlehack-private-2018/" + keys[-1]
 
     teamA = 0
     teamB = 0

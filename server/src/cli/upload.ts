@@ -281,7 +281,7 @@ const _handler = async (options) => {
         `in the scrimmage queue at ${chalk.underline(SERVER + '#/matches')}`);
         try {
             let count = result.data.data.source_code.match(/\/(\d+).gzip$/)[1];
-            log(`This is your battlehack's ${formatCount(count)} submission.`);
+            log(`This is battlehack's ${formatCount(count)} submission.`);
         } catch (e) {}
     }
 };

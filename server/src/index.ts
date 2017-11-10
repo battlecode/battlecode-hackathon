@@ -104,7 +104,8 @@ export class Lobby {
             : true;
 
         if (typeof create.map === "string") {
-            throw new Error("server map listing unimplemented");
+            this.map = JSON.parse(fs.readFileSync(path.join(paths.MAPS, create.map)).toString());
+            this.map.mapName = create.map;
         } else {
             this.map = create.map;
         }

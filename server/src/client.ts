@@ -28,6 +28,9 @@ type SocketEnum =
     {type: 'tcp', tcp: net.Socket, byline: byline.LineStream} |
     {type: 'web', web: WebSocket};
 
+//const debug = (msg: string) => console.log(msg);
+const debug = (msg: string) => {};
+
 export class Client {
     /**
      * The UUID of this client.
@@ -61,7 +64,7 @@ export class Client {
     static sendToAll(command: OutgoingCommand, clients: Client[]) {
         const serialized = JSON.stringify(command);
         for (let client of clients) {
-            // console.log(client.id + " < " + serialized);
+            debug(client.id + " < " + serialized);
             client.sendString(serialized);
         }
     }
@@ -100,7 +103,7 @@ export class Client {
                 });
                 return;
             }
-            //console.log(this.id + " > "+JSON.stringify(command));
+            debug(this.id + " > "+JSON.stringify(command));
             callback(command, this);
         };
         if (this.socket.type === 'tcp') {
@@ -120,7 +123,7 @@ export class Client {
     }
 
     send(command: OutgoingCommand) {
-        // console.log(this.id + " < " + JSON.stringify(command));
+        debug(this.id + " < " + JSON.stringify(command));
         this.sendString(JSON.stringify(command));
     }
 

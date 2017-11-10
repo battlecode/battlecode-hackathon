@@ -5,6 +5,7 @@ import ReconnectingWebSocket from 'reconnectingwebsocket';
 import { frameDebounce } from './util/framedebounce';
 import * as Inferno from 'inferno';
 import Component from 'inferno-component';
+import "babel-polyfill";
 
 import * as schema from './schema';
 import * as state from './state';
@@ -72,6 +73,10 @@ let updateCbs = new Array<() => void>();
 let maps: string[] = [];
 let replays: string[] = [];
 
+let lastUpdateTime: number = performance.now();
+let turnsPerSecond: number = 10;
+let isPlaying: boolean = false;
+
 ws.onclose = (event) => {
     console.log('ws connection closed');
 };
@@ -130,8 +135,45 @@ const loadReplay = (replay: string) => {
 const timelineChangeRound = (round: number) => {
     if (timelines.gameIDs.length > 0) {
         let gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
-        timelines.timelines[gameID].load(round);
+        timelines.timelines[gameID].load(round, render);
     }
+}
+
+const togglePlaying = () => {
+    isPlaying = !isPlaying;
+    render();
+}
+
+const updateCurrentFrame = (time: number) => {
+    const updateInterval = 1000 / turnsPerSecond;
+    const thisInterval = time - lastUpdateTime;
+    const numTurns = (thisInterval / updateInterval);
+    
+    const end = () => {
+        lastUpdateTime = time - (thisInterval % updateInterval);
+        render();
+        window.requestAnimationFrame(updateCurrentFrame);
+    }
+
+    if (isPlaying && timelines.gameIDs.length > 0) {
+        const gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
+        const timeline = timelines.timelines[gameID];
+        const turnToLoad = Math.min(timeline.current.turn + Math.floor(numTurns), timeline.farthest.turn);
+        const numTurnsToLoad = turnToLoad - timeline.current.turn;
+        if (turnToLoad >= 0) {
+            timelines.timelines[gameID].loadNextNTurns(numTurnsToLoad, end);
+        } else {
+            end();
+        }
+    } else {
+        end();
+    }
+}
+
+const togglePlaybackRate = () => {
+    const playbackRates = [1, 5, 10, 50, 1];
+    turnsPerSecond = playbackRates[playbackRates.indexOf(turnsPerSecond) + 1];
+    render();
 }
 
 // disable right-click menus
@@ -151,14 +193,19 @@ const renderer = () => {
                     farthestRound={timelines.timelines[gameID].farthest.turn}
                     maxRound={1000}
                     changeRound={timelineChangeRound}
+                    turnsPerSecond={turnsPerSecond}
+                    isPlaying={isPlaying}
+                    togglePlaying={togglePlaying}
+                    togglePlaybackRate={togglePlaybackRate}
                 />
                 <div style={`position: relative;`}>
-                    <RendererComponent gameState={timelines.timelines[gameID].farthest}
+                    <RendererComponent gameState={timelines.timelines[gameID].current}
                         key={gameID}
                         addUpdateListener={(cb) => updateCbs.push(cb)} />
                     <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
                         minimap test
-                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].farthest} />)}</div>
+                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].current} />)}
+                    </div>
                 </div>
             </div>
         );
@@ -173,3 +220,5 @@ const render = frameDebounce(() => {
 render();
 
 window.addEventListener('resize', render, false);
+
+window.requestAnimationFrame(updateCurrentFrame);

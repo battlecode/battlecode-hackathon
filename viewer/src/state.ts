@@ -6,6 +6,7 @@ import * as utf8 from './util/utf8';
 
 import {inflate} from 'pako/lib/inflate';
 import * as base64 from 'base64-js';
+import cloneDeep from 'lodash-es/cloneDeep';
 
 export class State {
     gameID: schema.GameID;
@@ -22,9 +23,9 @@ export class State {
         this.sectors = new LocationMap(start.initialState.width, start.initialState.height);
         this.entities = [];
         for (let entity of start.initialState.entities) {
-            this.entities[entity.id] = clone(entity);
+            this.entities[entity.id] = cloneDeep(entity);
         }
-        this.teams = clone(start.teams);
+        this.teams = cloneDeep(start.teams);
         this.gameID = start.gameID;
         // first turn received is 0
         this.turn = -1;
@@ -40,13 +41,13 @@ export class State {
         }
         this.turn += 1;
         for (let entity of nextTurn.changed) {
-            this.entities[entity.id] = clone(entity);
+            this.entities[entity.id] = cloneDeep(entity);
         }
         for (let dead of nextTurn.dead) {
             delete this.entities[dead];
         }
         for (let sector of nextTurn.changedSectors) {
-            this.sectors.set(sector.topLeft.x, sector.topLeft.y, clone(sector));
+            this.sectors.set(sector.topLeft.x, sector.topLeft.y, cloneDeep(sector));
         }
         if (nextTurn.winnerID !== undefined) {
             this.winner = nextTurn.winnerID;
@@ -70,13 +71,16 @@ export class Timeline {
         this.changeCbs = [];
         this.snapshots[0] = new State(start);
         this.snapFreq = snapFreq;
-        this.current = clone(this.snapshots[0]);
-        this.farthest = clone(this.snapshots[0]);
+        this.current = cloneDeep(this.snapshots[0]);
+        this.farthest = cloneDeep(this.snapshots[0]);
     }
 
     apply(nextTurn: schema.NextTurn) {
         this.farthest.apply(nextTurn);
         this.deltas[nextTurn.turn] = nextTurn;
+        if (this.farthest.turn % this.snapFreq == 0) {
+            this.snapshots[this.farthest.turn] = cloneDeep(this.farthest);
+        }
     }
 
     /**
@@ -92,25 +96,55 @@ export class Timeline {
     }
 
     loadLock: Mutex = new Mutex();
-    async load(turn: number) {
-        if (turn > this.deltas.length) throw new Error("out of range: "+turn);
+    async load(turn: number, callback?: () => void) {
+        if (turn > this.deltas.length || turn < 0) throw new Error("out of range: "+turn);
 
         let lock = await this.loadLock.acquire();
         let previous = turn;
         while (this.snapshots[previous] === undefined) previous--;
-        while (this.current.turn < turn) {
+        let newCurrent = cloneDeep(this.snapshots[previous]);
+        while (newCurrent.turn < turn) {
             // async, don't block the ui thread
-            if (this.current.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
+            if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
 
-            const delta = this.deltas[this.current.turn + 1];
+            const delta = this.deltas[newCurrent.turn + 1];
 
-            this.current.apply(delta);
+            newCurrent.apply(delta);
             for (let cb of this.changeCbs) {
-                cb(this.current, delta);
+                cb(newCurrent, delta);
             }
         }
 
+        this.current = newCurrent;
         lock.release();
+        if (callback) {
+            callback();
+        }
+    }
+
+    async loadNextNTurns(numTurns: number, callback?: () => void) {
+        if (numTurns < 0) throw new Error("out of range: "+numTurns);
+
+        let lock = await this.loadLock.acquire();
+        let newCurrent = cloneDeep(this.current);
+        const targetTurn = newCurrent.turn + numTurns;
+        while (newCurrent.turn < targetTurn) {
+            // async, don't block the ui thread
+            if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
+
+            const delta = this.deltas[newCurrent.turn + 1];
+
+            newCurrent.apply(delta);
+            for (let cb of this.changeCbs) {
+                cb(newCurrent, delta);
+            }
+        }
+
+        this.current = newCurrent;
+        lock.release();
+        if (callback) {
+            callback();
+        }        
     }
 }
 

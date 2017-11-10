@@ -118,3 +118,7 @@ select {
     overflow: visible;
     outline: none;
 }
+
+.dialog button.thin {
+    width: 50%;
+}

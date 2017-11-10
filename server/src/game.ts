@@ -637,11 +637,6 @@ export class Game {
             return "wrong team: "+entity.teamID;
         }
 
-        if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.turn) {
-            return "entity still on cool down: " + entity.id + "; "+
-                "ends "+entity.cooldownEnd+", current turn: "+this.turn;
-        }
-
         if (entity.type === "statue") {
             return "Statues can't do anything.";
         }
@@ -650,14 +645,23 @@ export class Game {
             return "Entity is held, cannot do anything";
         }
 
+        
         let err;
+        if (action.action === "disintegrate") {
+            err = this.doDisintegrate(entity, action);
+        }
+
+        if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.turn) {
+            return "entity still on cool down: " + entity.id + "; "+
+                "ends "+entity.cooldownEnd+", current turn: "+this.turn;
+        }
+
+
 
         if (action.action === "pickup") {
             err = this.doPickup(entity, action);
         } else if (action.action === "throw") {
             err = this.doThrow(entity, action);
-        } else if (action.action === "disintegrate") {
-            err = this.doDisintegrate(entity, action);
         } else if (action.action === "move" || action.action === "build") {
 
             if (action.dx === undefined || isNaN(action.dx) || action.dx < -1 || action.dx > 1 ||

@@ -11,8 +11,10 @@ start = time.clock()
 def nearest_glass_state(state, entity):
     nearest_statue = None
     nearest_dist = 10000
-    for other_entity in state.get_entities(entity_type=battlecode.STATUE):
-        dist = entity.location.distance_to(other_entity.location)
+    for other_entity in state.get_entities(entity_type=battlecode.Entity.STATUE):
+        if(entity == other_entity):
+            continue
+        dist = entity.location.adjacent_distance_to(other_entity.location)
         if(dist< nearest_dist):
             dist = nearest_dist
             nearest_statue = other_entity
@@ -21,13 +23,18 @@ def nearest_glass_state(state, entity):
 
 for state in game.turns():
     for entity in state.get_entities(team=state.my_team):
-        if entity.team != state.my_team or not entity.can_act:
-            continue
+
+        if(state.turn % 100 == 0):
+            for direction in battlecode.Direction.directions():
+                if entity.can_build(direction):
+                    entity.queue_build(direction)
+
         my_location = entity.location
-        near_entites = entity.entities_within_distance_squared(2)
+        near_entites = entity.entities_within_euclidean_distance(1.9)
         near_entites = list(filter(lambda x: x.can_be_picked, near_entites))
 
         for pickup_entity in near_entites:
+            assert entity.location.is_adjacent(pickup_entity.location)
             if entity.can_pickup(pickup_entity):
                 entity.queue_pickup(pickup_entity)
 
@@ -40,9 +47,6 @@ for state in game.turns():
         for direction in battlecode.Direction.directions():
             if entity.can_move(direction):
                 entity.queue_move(direction)
-    print(list(state.get_entities(entity_type=battlecode.HEDGE)))
-    print(list(state.get_entities(team=state.my_team,
-        entity_type=battlecode.THROWER)))
 
 end = time.clock()
 print('clock time: '+str(end - start))

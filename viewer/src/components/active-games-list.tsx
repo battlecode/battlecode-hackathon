@@ -15,7 +15,7 @@ export class ActiveGamesList extends Component<{}, {}> {
         return (
             <div class="active-games-list" style={{top: TOP_BAR_HEIGHT}}>
                 {this.props.games.map((game) => (
-                    <ActiveGame game={game} />
+                    <ActiveGame game={game} key={game.gameID} />
                 ))}
             </div>
         );

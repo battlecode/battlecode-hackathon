@@ -15,7 +15,7 @@ import { Stats } from './components/stats';
 import { Minimap } from './components/minimap';
 import { TopBar } from './components/topbar';
 import { ActiveGamesList } from './components/active-games-list';
-import { ActiveGameInfo } from './types';
+import { GameStatus, ActiveGameInfo } from './types';
 
 require('purecss/build/pure.css');
 require('./style.css');
@@ -104,7 +104,6 @@ ws.onerror = (err) => {
 };
 ws.onmessage = (message) => {
     // TODO validate?
-    console.log(message);
     let command = JSON.parse(message.data) as schema.OutgoingCommand;
     if (command.command === "listMapsResponse") {
         maps = command.mapNames;
@@ -112,13 +111,24 @@ ws.onmessage = (message) => {
     if (command.command === "listReplaysResponse") {
         replays = command.replayNames;
     }
-    if (command.command === "createGameConfirm") {
-        if (!(command.gameID in activeGames)) {
+    if (command.command === "gameStatusUpdate") {
+        if (command.gameID in activeGames) {
+            if ((command.status == 'finished' || command.status == 'cancelled') || (command.status == 'running' && activeGames[command.gameID].status == 'lobby')) {
+                activeGames[command.gameID].status = command.status;
+            }
+        } else {
             activeGames[command.gameID] = {
-                status: 'waiting',
-                mapName: '1-136',
+                gameID: command.gameID,
+                status: command.status as GameStatus,
+                mapName: command.map,
                 closeActiveGame: getCloseActiveGame(command.gameID),
-            };
+            }
+        }
+        if (command.connected.length > 0) {
+            activeGames[command.gameID].playerOne = command.connected[0];
+        }
+        if (command.connected.length > 1) {
+            activeGames[command.gameID].playerTwo = command.connected[1];
         }
     }
     timelines.apply(command);
@@ -194,12 +204,6 @@ const togglePlaybackRate = () => {
 const getCloseActiveGame = (gameID: schema.GameID) => (() => {
     delete activeGames[gameID];
 });
-
-activeGames['fred'] = {
-    status: 'running',
-    mapName: 'temple of anubis',
-    closeActiveGame: getCloseActiveGame('fred'),
-};
 
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());

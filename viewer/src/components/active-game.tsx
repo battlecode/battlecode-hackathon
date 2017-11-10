@@ -24,12 +24,14 @@ export class ActiveGame extends Component<Props, State> {
 
     formatStatus = () => {
         const status = this.props.game.status;
-        if (status == 'waiting') {
+        if (status === 'lobby') {
             return 'Waiting for players...';
-        } else if (status == 'running') {
+        } else if (status === 'running') {
             return 'Running...';
-        } else if (status == 'finished') {
+        } else if (status === 'finished') {
             return 'Finished!';
+        } else if (status === 'cancelled') {
+            return 'Cancelled :(';
         }
     };
     
@@ -50,9 +52,9 @@ export class ActiveGame extends Component<Props, State> {
             <div class="dialog">
                 <div>
                     {this.state.aboutToClose ? (
-                        <span class="red">Are you sure?</span>
+                         <span class="red">Are you sure?</span>
                     ) : (
-                        <span>Status: {this.formatStatus()}</span>
+                         <span>Status: {this.formatStatus()}</span>
                     )}
                 </div>
                 <div>
@@ -65,13 +67,13 @@ export class ActiveGame extends Component<Props, State> {
                 </div>
                 {this.state.aboutToClose ? (
                      <span>
-                         <button class="red thin" onclick={this.onCloseConfirmClick}>Yes</button>
-                         <button class="green thin" onclick={this.onCloseCancelClick}>No</button>
+                         <button class="red thin" onclick={this.onCloseConfirmClick} key={`closeConfirm${this.props.game.gameID}`}>Yes</button>
+                         <button class="green thin" onclick={this.onCloseCancelClick} key={`closeCancel${this.props.game.gameID}`}>No</button>
                      </span>
                 ) : (
                      <span>
-                         <button class="blue thin">View</button>
-                         <button class="red thin" onclick={this.onCloseClick}>Close</button>
+                         <button class="blue thin" key={`view${this.props.game.gameID}`}>View</button>
+                         <button class="red thin" onclick={this.onCloseClick} key={`close${this.props.game.gameID}`}>Close</button>
                      </span>
                 )}
             </div>

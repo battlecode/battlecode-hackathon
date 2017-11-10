@@ -832,7 +832,7 @@ export default class Server {
         let response: ReplayResponse = {
             command: "replayResponse",
             name: replayRequest.name,
-            match: buf.toString()
+            match: buf.toString('base64')
         }
         client.send(response);
     }

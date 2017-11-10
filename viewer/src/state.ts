@@ -239,7 +239,7 @@ export class TimelineCollection {
             if (callback) {
                 const gameInfo: ActiveGameInfo = {
                     gameID: gameID,
-                    status: 'running',
+                    status: 'finished',
                     mapName: matchData.initialState.mapName!,
                     playerOne: matchData.teams[0].name,
                     playerTwo: matchData.teams[1].name,

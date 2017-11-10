@@ -134,12 +134,12 @@ def endGame(game):
     winner = 0 if teamA==teamB else 1 if teamA>teamB else 2
     if winner == 0:
         print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " failed, nobody connected to the engine.")
-        c.execute("UPDATE scrimmage_matches SET status='failed' WHERE id=%s", [game['db_id']])
+        c.execute("UPDATE scrimmage_matches SET status='failed' finish_time=CURRENT_TIMESTAMP WHERE id=%s", [game['db_id']])
         conn.commit()
         return
 
-    redElo = getTeamRating(game['teams'][0]['botID'])
-    blueElo = getTeamRating(game['teams'][1]['botID'])
+    redElo = getTeamRating(game['teams'][0]['db_id'])
+    blueElo = getTeamRating(game['teams'][1]['db_id'])
 
     r_1 = 10**(redElo/400)
     r_2 = 10**(blueElo/400)
@@ -152,7 +152,7 @@ def endGame(game):
 
     print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "completed (" + ("red" if winner==1 else "blue") + " won), new elos: " + str(red_elo) + " and " +str(blue_elo) + ".")
 
-    c.execute("UPDATE scrimmage_matches SET status='completed', match_files=%s, match_winners=%s, red_rating_after=%s, blue_rating_after=%s WHERE id=%s", [keys,winners,game['db_id'], red_elo,blue_elo])
+    c.execute("UPDATE scrimmage_matches SET status='completed', match_files=%s, match_winners=%s, red_rating_after=%s, blue_rating_after=%s, finish_time=CURRENT_TIMESTAMP WHERE id=%s", [keys,winners,red_elo,blue_elo,game['db_id']])
     conn.commit()
 
 def listen(games, socket, sneak):
@@ -170,7 +170,7 @@ def listen(games, socket, sneak):
                             print(prefix+game['teams'][int(message['team'])-1]['name'] + " connected in match against " + game['teams'][int(not bool(int(message['team'])))-1]['name'] + ".")
                         if message['command'] == 'gameReplay':
                             match['replay_data'] = message['matchData']
-                            match['winner'] = int(message['winner'])
+                            match['winner'] = int(message['winner']['teamID'])
                             print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "ended (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
 
                             endGame(game)
@@ -178,17 +178,28 @@ def listen(games, socket, sneak):
 
 
 def startGame(teams, match_map):
-    command = json.dumps({"command":"createGame","serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True})
+    command = json.dumps({"command":"createGame","sendReplay":True,"serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True})
     s.send(command.encode())
     s.send(b'\n')
 
 def getTeamRating(id):
-    c.execute("SELECT red_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and scrimmage_status = 'completed' and red_team = %s ORDER BY finish_time DESC",[id])
-    redElos = c.fetchone()
-    c.execute("SELECT blue_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and scrimmage_status = 'completed' and red_team = %s ORDER BY finish_time DESC",[id])
-    blueElos = c.fetchone()
+    try:
+        c.execute("SELECT red_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and status = 'completed' and red_team=%s ORDER BY finish_time DESC",[id])
+        redElos = c.fetchall()
+    except Exception as e:
+        redElos = []
+    
+    try:
+        c.execute("SELECT blue_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and status = 'completed' and blue_team=%s ORDER BY finish_time DESC",[id])
+        blueElos = c.fetchall()
+    except Exception as e:
+        blueElos = []
 
-    elos = sorted([redElos+blueElos],key=lambda x: x[1],reverse=True)
+    if len(redElos+blueElos) == 0:
+        return ELO_START
+
+    print(redElos+blueElos)
+    elos = sorted(redElos+blueElos,key=lambda x: x[1],reverse=True)
 
     elo = ELO_START
     if len(elos) > 0:
@@ -208,8 +219,13 @@ except Exception as e:
 print(prefix + "Connected to engine.  Queueing games now.")
 
 while True:
-    c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
-    queuedGames = c.fetchall()
+    try:
+        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
+    
+        queuedGames = c.fetchall()
+    except Exception as e:
+        conn.rollback()
+        continue
 
     if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
         time.sleep(0.005)
@@ -228,8 +244,10 @@ while True:
 
     queuedGame = queuedGames[0]
 
-    print(prefix+"Queuing game between " + queuedGame[5] + " and " + queuedGame[6] + ".")
-
+    try:
+        print(prefix+"Queuing game between " + queuedGame[5] + " and " + queuedGame[6] + ".")
+    except Exception as e:
+        print(queuedGame)
     c.execute("UPDATE scrimmage_matches SET status='running' WHERE id=%s",[queuedGame[0]])
     conn.commit()
 

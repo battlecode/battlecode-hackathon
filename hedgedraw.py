@@ -95,9 +95,11 @@ plt.show()
 '''
 
 import json
-j = 1000
+j = 0
 for x in range(w):
     for y in range(h):
+        if not arr[x][y]:
+            continue
         print(json.dumps({
             'id': j,
             'type': 'hedge',

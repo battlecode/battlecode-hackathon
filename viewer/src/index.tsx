@@ -72,6 +72,10 @@ let updateCbs = new Array<() => void>();
 let maps: string[] = [];
 let replays: string[] = [];
 
+let lastUpdateTime: number = performance.now();
+let updateInterval: number = 100;
+let isPlaying: boolean = false;
+
 ws.onclose = (event) => {
     console.log('ws connection closed');
 };
@@ -133,6 +137,36 @@ const timelineChangeRound = (round: number) => {
     }
 }
 
+const togglePlaying = () => {
+    isPlaying = !isPlaying;
+    render();
+}
+
+const updateCurrentFrame = (time: number) => {
+    const thisInterval = time - lastUpdateTime;
+    const numTurns = (thisInterval / updateInterval);
+    
+    const end = () => {
+        lastUpdateTime = time - (thisInterval % updateInterval);
+        render();
+        window.requestAnimationFrame(updateCurrentFrame);
+    }
+
+    if (isPlaying && timelines.gameIDs.length > 0) {
+        const gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
+        const timeline = timelines.timelines[gameID];
+        const turnToLoad = Math.min(timeline.current.turn + Math.floor(numTurns), timeline.farthest.turn);
+        const numTurnsToLoad = turnToLoad - timeline.current.turn;
+        if (turnToLoad >= 0) {
+            timelines.timelines[gameID].loadNextNTurns(numTurnsToLoad, end);
+        } else {
+            end();
+        }
+    } else {
+        end();
+    }
+}
+
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());
 
@@ -150,6 +184,8 @@ const renderer = () => {
                     farthestRound={timelines.timelines[gameID].farthest.turn}
                     maxRound={1000}
                     changeRound={timelineChangeRound}
+                    isPlaying={isPlaying}
+                    togglePlaying={togglePlaying}
                 />
                 <div style={`position: relative;`}>
                     <RendererComponent gameState={timelines.timelines[gameID].current}
@@ -173,3 +209,5 @@ const render = frameDebounce(() => {
 render();
 
 window.addEventListener('resize', render, false);
+
+window.requestAnimationFrame(updateCurrentFrame);

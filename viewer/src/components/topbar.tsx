@@ -3,8 +3,9 @@ import Component from 'inferno-component';
 
 import { TOP_BAR_HEIGHT } from '../constants';
 import { DialogButton } from './dialog-button';
-import { LoadGameMenu } from './load-game-menu';
 import { NewGameMenu } from './new-game-menu';
+import { LoadGameMenu } from './load-game-menu';
+import { ViewerSettingsMenu } from './viewer-settings-menu';
 import { Timeline } from './timeline';
 
 interface Props extends Inferno.Props {
@@ -16,6 +17,8 @@ interface Props extends Inferno.Props {
     farthestRound: number;
     maxRound: number;
     changeRound: (number) => void;
+    isPlaying: boolean;
+    togglePlaying: () => void;
 }
 
 interface State {
@@ -71,10 +74,15 @@ export class TopBar extends Component<{}, State> {
                     active={this.state.active[2]}
                     idx={2}
                     color="red"
-                    label="Something else"
+                    label="Viewer settings"
                     xOffset={325}
                     deselectAllExceptToggle={this.deselectAllExceptToggle}
-                />
+                >
+                    <ViewerSettingsMenu 
+                        isPlaying={this.props.isPlaying}
+                        togglePlaying={this.props.togglePlaying}
+                    />
+                </DialogButton>
                 <Timeline
                     currentRound={this.props.currentRound}
                     farthestRound={this.props.farthestRound}

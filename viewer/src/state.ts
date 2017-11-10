@@ -97,8 +97,7 @@ export class Timeline {
 
     loadLock: Mutex = new Mutex();
     async load(turn: number, callback?: () => void) {
-        if (turn > this.deltas.length) throw new Error("out of range: "+turn);
-        console.log("loading turn " + turn);
+        if (turn > this.deltas.length || turn < 0) throw new Error("out of range: "+turn);
 
         let lock = await this.loadLock.acquire();
         let previous = turn;
@@ -115,15 +114,37 @@ export class Timeline {
                 cb(newCurrent, delta);
             }
         }
-        console.log(newCurrent.turn);
 
         this.current = newCurrent;
-
         lock.release();
-
         if (callback) {
             callback();
         }
+    }
+
+    async loadNextNTurns(numTurns: number, callback?: () => void) {
+        if (numTurns < 0) throw new Error("out of range: "+numTurns);
+
+        let lock = await this.loadLock.acquire();
+        let newCurrent = cloneDeep(this.current);
+        const targetTurn = newCurrent.turn + numTurns;
+        while (newCurrent.turn < targetTurn) {
+            // async, don't block the ui thread
+            if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
+
+            const delta = this.deltas[newCurrent.turn + 1];
+
+            newCurrent.apply(delta);
+            for (let cb of this.changeCbs) {
+                cb(newCurrent, delta);
+            }
+        }
+
+        this.current = newCurrent;
+        lock.release();
+        if (callback) {
+            callback();
+        }        
     }
 }
 

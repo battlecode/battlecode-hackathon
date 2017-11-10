@@ -301,9 +301,17 @@ export interface Keyframe {
     teams: TeamData[];
 }
 
+export interface GameStatusUpdate {
+    gameID: GameID;
+    teams: TeamData[];
+    connected: boolean[];
+    winner?: TeamData;
+}
+
 ///////////////////
 // Extra control //
 ///////////////////
+
 
 // Note: client implementations in new languages need not implement the following commands.
 
@@ -346,7 +354,7 @@ export interface CreateGame {
 }
 
 export interface CreateGameConfirm {
-    command: "createGameIDConfirm";
+    command: "createGameConfirm";
 
     gameID: GameID;
 }
@@ -453,4 +461,4 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
 export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
     ListReplaysRequest | ReplayRequest;
 export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | MissedTurn | ErrorCommand | Keyframe |
-    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse | PlayerConnected;
+    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse | PlayerConnected | CreateGameConfirm;

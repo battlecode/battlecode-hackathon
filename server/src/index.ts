@@ -104,7 +104,8 @@ export class Lobby {
             : true;
 
         if (typeof create.map === "string") {
-            throw new Error("server map listing unimplemented");
+            this.map = JSON.parse(fs.readFileSync(path.join(paths.MAPS, create.map)).toString());
+            this.map.mapName = create.map;
         } else {
             this.map = create.map;
         }
@@ -751,6 +752,10 @@ export default class Server {
         let lobby = new Lobby(uuid(), createGame, this.spectators, this.opts.debug, client);
         this.games.set(lobby.id, lobby);
         this.log(`Created ${lobby.isPickup? 'pickup ':''}game ${prettyID(lobby.id)} on map ${lobby.map.mapName}`);
+        client.send({
+            command: "createGameConfirm",
+            gameID: lobby.id
+        });
     }
 
     private handleListMapsRequest = async (listMaps: ListMapsRequest, client: Client) => {

@@ -8,6 +8,7 @@ import io
 import time
 import os
 import sys
+import signal
 try:
     import cPickle as pickle
 except:
@@ -50,76 +51,63 @@ def direction_rotate_degrees_clockwise(direction, degrees):
 class Direction(object):
     ''' This is an enum for direction '''
     @staticmethod
-    def SOUTH_WEST():
-        return Direction(-1, -1)
-
-    @staticmethod
-    def SOUTH_EAST():
-        return Direction(1, -1)
-
-    @staticmethod
-    def SOUTH():
-        return Direction(0, -1)
-
-    @staticmethod
-    def NORTH_EAST():
-        return Direction(1,  1)
-
-    @staticmethod
-    def NORTH():
-        return Direction(0,  1)
-
-    @staticmethod
-    def NORTH_WEST():
-        return Direction(-1,  1)
-
-    @staticmethod
-    def EAST():
-        return Direction(1, 0)
-
-    @staticmethod
-    def WEST():
-        return Direction(-1,  0)
-
-    @staticmethod
     def directions():
-        return [Direction.SOUTH_WEST(), Direction.SOUTH(),
-                Direction.SOUTH_EAST(), Direction.EAST(),
-                Direction.NORTH_EAST(), Direction.NORTH(),
-                Direction.NORTH_WEST(), Direction.WEST()]
+        return [Direction.SOUTH_WEST, Direction.SOUTH,
+                Direction.SOUTH_EAST, Direction.EAST,
+                Direction.NORTH_EAST, Direction.NORTH,
+                Direction.NORTH_WEST, Direction.WEST]
 
     def __init__(self, dx, dy):
+        '''bees'''
         self.dx = dx
+        '''fingle'''
         self.dy = dy
 
     @staticmethod
     def from_delta(dx, dy):
         if dx < 0:
             if dy < 0:
-                return Direction.SOUTH_WEST()
+                return Direction.SOUTH_WEST
             elif dy == 0:
-                return Direction.WEST()
+                return Direction.WEST
             elif dy > 0:
-                return Direction.NORTH_WEST()
+                return Direction.NORTH_WEST
         elif dx == 0:
             if dy < 0:
-                return Direction.SOUTH()
+                return Direction.SOUTH
             elif dy == 0:
                 raise BattlecodeError("not a valid delta: "+str(dx)+","+str(dy))
             elif dy > 0:
-                return Direction.NORTH()
+                return Direction.NORTH
         elif dx > 0:
             if dy < 0:
-                return Direction.SOUTH_EAST()
+                return Direction.SOUTH_EAST
             elif dy == 0:
-                return Direction.EAST()
+                return Direction.EAST
             elif dy > 0:
-                return Direction.NORTH_EAST()
+                return Direction.NORTH_EAST
 
     @staticmethod
     def all():
         for direction in Direction.directions():
             yield direction
+
+'''The direction (-1, -1).'''
+Direction.SOUTH_WEST = Direction(-1, -1)
+'''The direction (1, -1).'''
+Direction.SOUTH_EAST = Direction(1, -1)
+'''The direction (0, -1).'''
+Direction.SOUTH = Direction(0, -1)
+'''The direction (1,  1).'''
+Direction.NORTH_EAST = Direction(1,  1)
+'''The direction (0,  1).'''
+Direction.NORTH = Direction(0,  1)
+'''The direction (-1,  1).'''
+Direction.NORTH_WEST = Direction(-1,  1)
+'''The direction (1, 0).'''
+Direction.EAST = Direction(1, 0)
+'''The direction (-1,  0).'''
+Direction.WEST = Direction(-1,  0)
 
 class Entity(object):
     '''
@@ -794,10 +782,16 @@ class Game(object):
         self._socket = conn.makefile('rwb', 2**16)
 
         # send login command
-        self._send({
+        login = {
             'command': 'login',
             'name': name,
-        })
+        }
+        if 'BATTLECODE_PLAYER_KEY' in os.environ:
+            key = os.environ['BATTLECODE_PLAYER_KEY'] 
+            print('Logging in with key:', key)
+            login['key'] = key
+
+        self._send(login)
 
         self._recv_queue = Queue()
 
@@ -876,6 +870,8 @@ class Game(object):
             try:
                 item = self._recv_queue.get(block=True, timeout=.1)
                 return item
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt
             except:
                 continue
 

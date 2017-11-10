@@ -839,7 +839,7 @@ class Game(object):
         self._socket.write(message.encode('utf-8'))
         self._socket.write(b'\n')
         self._socket.flush()
-    
+
     def _recv_thread(self):
         '''Loop, receiving '\n'-delimited JSON messages from the server.
         See server/src/schema.ts for valid messages.'''
@@ -865,14 +865,19 @@ class Game(object):
 
     def _recv(self):
         '''Pull a message from our queue; blocking.'''
-        return self._recv_queue.get()
+        while True:
+            try:
+                item = self._recv_queue.get(block=True, timeout=.1)
+                return item
+            except:
+                continue
 
     def _can_recv_more(self):
         return not self._recv_queue.empty()
 
     def _finish(self, winner_id):
-        self._socket.close()
-        self._socket = None
+        if self._socket is not None:
+            self._socket = None
         self.winner = self.state.teams[winner_id]
 
     def next_turn(self):
@@ -884,14 +889,15 @@ class Game(object):
         while True:
             turn = self._recv()
 
+            if turn is None:
+                self._finish(0)
+                return
+
             if turn['command'] == 'keyframe':
                 self.state._validate_keyframe(turn)
                 continue
 
             assert turn['command'] == 'nextTurn'
-
-            if 'winner' in turn:
-                raise Exception('Game finished')
 
             self.state._update_entities(turn['changed'])
             self.state._kill_entities(turn['dead'])
@@ -921,6 +927,8 @@ class Game(object):
     def _submit_turn(self):
         if self.state.turn in self._missed_turns:
             self.state._action_queue = []
+            return
+        if self._socket is None:
             return
         self._send({
             'command': 'makeTurn',

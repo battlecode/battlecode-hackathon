@@ -14,6 +14,7 @@ import { RendererComponent } from './components/renderer';
 import { Stats } from './components/stats';
 import { Minimap } from './components/minimap';
 import { TopBar } from './components/topbar';
+import { ActiveGamesList } from './components/active-games-list';
 
 require('purecss/build/pure.css');
 require('./style.css');
@@ -76,6 +77,8 @@ let replays: string[] = [];
 let lastUpdateTime: number = performance.now();
 let turnsPerSecond: number = 10;
 let isPlaying: boolean = false;
+
+let activeGames = [];
 
 ws.onclose = (event) => {
     console.log('ws connection closed');
@@ -197,6 +200,9 @@ const renderer = () => {
                     isPlaying={isPlaying}
                     togglePlaying={togglePlaying}
                     togglePlaybackRate={togglePlaybackRate}
+                />
+                <ActiveGamesList
+                    games={activeGames}
                 />
                 <div style={`position: relative;`}>
                     <RendererComponent gameState={timelines.timelines[gameID].current}

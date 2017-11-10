@@ -119,6 +119,33 @@ select {
     outline: none;
 }
 
-.dialog button.thin {
+.dialog button.thin, .active-game button {
     width: 50%;
+}
+
+.active-games-list {
+    font-family: "ourfont";
+    position: absolute;
+    right: 25px;
+    z-index: 100000;
+}
+
+.active-game {
+    width: 300px;
+    margin: 5px;
+    border: 2px solid black;
+    box-sizing: border-box;
+    background-color: #DDD;
+}
+
+.active-game div {
+    padding: 5px;
+}
+
+span.red {
+    color: #F44336;
+}
+
+span.blue {
+    color: #2196F3;
 }

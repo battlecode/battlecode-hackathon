@@ -23,7 +23,7 @@ import _thread
 import config
 
 running_games = []
-sneak = {'ng_id':None}
+sneak = {'ng_id':None,'DB_BEING_USED':False}
 
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
@@ -98,7 +98,7 @@ def runGame(bots):
 
     return sandboxes
 
-def endGame(game):
+def endGame(game,sneak):
     winners = []
     replays = []
     for match in game['matches']:
@@ -134,26 +134,28 @@ def endGame(game):
     winner = 0 if teamA==teamB else 1 if teamA>teamB else 2
     if winner == 0:
         print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " failed, nobody connected to the engine.")
+        while sneak['DB_BEING_USED']:
+            time.sleep(0.005)
+        sneak['DB_BEING_USED'] = True
         c.execute("UPDATE scrimmage_matches SET status='failed' finish_time=CURRENT_TIMESTAMP WHERE id=%s", [game['db_id']])
         conn.commit()
+        sneak['DB_BEING_USED'] = False
         return
 
-    redElo = getTeamRating(game['teams'][0]['db_id'])
-    blueElo = getTeamRating(game['teams'][1]['db_id'])
+    red_elo = getTeamRating(game['teams'][0]['db_id'],sneak)
+    blue_elo = getTeamRating(game['teams'][1]['db_id'],sneak)
 
-    r_1 = 10**(redElo/400)
-    r_2 = 10**(blueElo/400)
-
-    e_1 = r_1/(r_1+r_2)
-    e_2 = r_2/(r_1+r_2)
-
-    red_elo = int(round(r_1 + ELO_K*(2-winner-e_1)))
-    blue_elo = int(round(r_2 + ELO_K*(winner-1-e_2)))
+    red_elo += ELO_K * (2-winner - 1/(1+10**((blue_elo-red_elo)/400)))
+    blue_elo += ELO_K * (winner-1 - 1/(1+10**((red_elo-blue_elo)/400)))     
 
     print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "completed (" + ("red" if winner==1 else "blue") + " won), new elos: " + str(red_elo) + " and " +str(blue_elo) + ".")
 
+    while sneak['DB_BEING_USED']:
+        time.sleep(0.005)
+    sneak['DB_BEING_USED'] = True
     c.execute("UPDATE scrimmage_matches SET status='completed', match_files=%s, match_winners=%s, red_rating_after=%s, blue_rating_after=%s, finish_time=CURRENT_TIMESTAMP WHERE id=%s", [keys,winners,red_elo,blue_elo,game['db_id']])
     conn.commit()
+    sneak['DB_BEING_USED'] = False
 
 def listen(games, socket, sneak):
     socket = socket.makefile('rwb',2**16)
@@ -171,9 +173,9 @@ def listen(games, socket, sneak):
                         if message['command'] == 'gameReplay':
                             match['replay_data'] = message['matchData']
                             match['winner'] = int(message['winner']['teamID'])
-                            print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "ended (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
+                            print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " ended (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
 
-                            endGame(game)
+                            endGame(game, sneak)
         time.sleep(0.005)
 
 
@@ -182,7 +184,10 @@ def startGame(teams, match_map):
     s.send(command.encode())
     s.send(b'\n')
 
-def getTeamRating(id):
+def getTeamRating(id, sneak):
+    while sneak['DB_BEING_USED']:
+        time.sleep(0.005)
+    sneak['DB_BEING_USED'] = True
     try:
         c.execute("SELECT red_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and status = 'completed' and red_team=%s ORDER BY finish_time DESC",[id])
         redElos = c.fetchall()
@@ -194,11 +199,10 @@ def getTeamRating(id):
         blueElos = c.fetchall()
     except Exception as e:
         blueElos = []
-
+    sneak['DB_BEING_USED'] = False
     if len(redElos+blueElos) == 0:
         return ELO_START
 
-    print(redElos+blueElos)
     elos = sorted(redElos+blueElos,key=lambda x: x[1],reverse=True)
 
     elo = ELO_START
@@ -220,13 +224,18 @@ print(prefix + "Connected to engine.  Queueing games now.")
 
 while True:
     try:
+        while sneak['DB_BEING_USED']:
+            sleep(0.005)
+        sneak['DB_BEING_USED'] = True        
         c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
     
         queuedGames = c.fetchall()
+        sneak['DB_BEING_USED'] = False
     except Exception as e:
         conn.rollback()
+        time.sleep(0.005)
         continue
-
+    
     if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
         time.sleep(0.005)
         for game in running_games:
@@ -238,7 +247,7 @@ while True:
                         if match['connected'][i]:
                             winners.append(i+1)
                     match['winner'] = 0 if len(winners)==0 else 1 if winners[0]==0 else 2
-                    endGame(game)
+                    endGame(game,sneak)
                     print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " timed out (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
         continue
 
@@ -248,16 +257,27 @@ while True:
         print(prefix+"Queuing game between " + queuedGame[5] + " and " + queuedGame[6] + ".")
     except Exception as e:
         print(queuedGame)
+        time.sleep(0.005)
+        continue
+
+    while sneak['DB_BEING_USED']:
+        time.sleep(0.005)
+    sneak['DB_BEING_USED'] = True
     c.execute("UPDATE scrimmage_matches SET status='running' WHERE id=%s",[queuedGame[0]])
     conn.commit()
+    sneak['DB_BEING_USED'] = False
 
     bucket.download_file(queuedGame[3][49:], 'botA.tar.gz')
     bucket.download_file(queuedGame[4][49:], 'botB.tar.gz')
     
     maps = []
     for mapID in queuedGame[7]:
+        while sneak['DB_BEING_USED']:
+            time.sleep(0.005)
+        sneak['DB_BEING_USED'] = True
         c.execute("SELECT name from scrimmage_maps WHERE id=%s",[mapID])
         maps.append(c.fetchone()[0])
+        sneak['DB_BEING_USED'] = False
 
     matches = []
     teams = [{"name":queuedGame[5],"key":None,"db_id":queuedGame[1]},{"name":queuedGame[6],"key":None,"db_id":queuedGame[2]}]

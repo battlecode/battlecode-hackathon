@@ -139,15 +139,14 @@ class Sandbox:
         """
         
         key = self.stdout_queue.get(block=True, timeout=10)
-        os.system("docker container kill " + key + " > /dev/null")
         try:
+            os.system("docker container kill " + key + " > /dev/null")
             self.command_process.kill()
         except OSError:
             print("error killing")
         self.command_process.wait()
         self.child_queue.put(None)
         
-        print(self.working_directory)
         shutil.rmtree(self.working_directory)
 
     def retrieve(self):

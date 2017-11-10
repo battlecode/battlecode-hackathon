@@ -1,197 +1,793 @@
 import {
+    CreateGame,
     EntityData,
+    GameStart,
+    GameID,
+    GameReplay,
     IncomingCommand,
+    Login,
     LoginConfirm,
-    MapData,
+    MakeTurn,
+    MapFile,
     MapTile,
-    NextTurn,
+    MatchData,
     NEUTRAL_TEAM,
+    NextTurn,
     OutgoingCommand,
+    PlayerKey,
     TeamData,
+    SpectateAll,
     TeamID,
+    ListMapsRequest,
+    ListReplaysRequest,
+    ReplayRequest,
+    ListMapsResponse,
+    ListReplaysResponse,
+    ReplayResponse,
 } from './schema';
+
+import ClientError from './error';
 import { Game } from './game';
 import { Client, ClientID } from './client';
+import * as paths from './paths';
+import Mutex from './mutex';
+import readdirRecursive from './readdirrecursive';
+
 import * as net from 'net';
 import * as http from 'http';
+import * as zlib from 'zlib';
+import { promisify } from 'util';
+import * as path from 'path';
+import * as fs from 'fs';
+
 import * as ws from 'ws';
+import * as uuid from 'uuid/v4';
+import * as _ from 'lodash';
+import chalk from 'chalk';
 
-//const DEFAULT_MAP: MapData = {
-//    height: 12,
-//    width: 12,
-//    tiles: [
-//        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-//        ['D','D','D','G','D','D','D','D','D','D','G','D'],
-//        ['D','D','G','D','D','D','D','D','D','D','G','D'],
-//        ['G','G','D','D','D','D','D','D','D','D','G','D'],
-//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-//        ['D','D','D','D','D','G','G','D','D','D','D','D'],
-//        ['D','D','D','D','D','D','D','D','D','D','D','D'],
-//        ['D','G','D','D','D','D','D','D','D','D','G','G'],
-//        ['D','G','D','D','D','D','D','D','D','G','D','D'],
-//        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-//        ['D','G','D','D','D','D','D','D','G','D','D','D'],
-//    ],
-//    sector_size: 10,
-//};
-//const DEFAULT_ENTITIES: EntityData[] = [
-//    {id: 0, type: "statue", location: {x:1,y:0}, team: 1, hp: 10},
-//    {id: 1, type: "statue", location: {x:10,y:11}, team: 2, hp: 10},
-//    {id: 2, type: "hedge", location: {x:1,y:2}, team: 0, hp: 100},
-//    {id: 3, type: "hedge", location: {x:2,y:2}, team: 0, hp: 100},
-//    {id: 4, type: "hedge", location: {x:3,y:2}, team: 0, hp: 100},
-//    {id: 5, type: "hedge", location: {x:10,y:9}, team: 0, hp: 100},
-//    {id: 6, type: "hedge", location: {x:9,y:9}, team: 0, hp: 100},
-//    {id: 7, type: "hedge", location: {x:8,y:9}, team: 0, hp: 100},
-//    {id: 8, type: "thrower", location: {x:3,y:3}, team: 1, hp: 10},
-//    {id: 9, type: "thrower", location: {x:8,y:8}, team: 2, hp: 10},
-//];
+const readFile = promisify(fs.readFile);
+const writeFile = promisify(fs.writeFile);
+const readdir = promisify(fs.readdir);
+const exists = promisify(fs.exists);
+const mkdir = promisify(fs.mkdir);
+const stat = promisify(fs.stat);
 
-const DEFAULT_MAP: MapData = {
-    height: 100,
-    width: 100,
-    tiles: Array(100).fill(Array(100).fill('D')),
-    sector_size: 10
-};
-const DEFAULT_ENTITIES: EntityData[] = [];
-let id = 0;
-for (let x = 0; x < 10; x++) {
-    for (let y = 0; y < 10; y++) {
-        DEFAULT_ENTITIES.push(
-            {id: id, type: "statue", location: {x:x*10,y:y*10}, team: 1 + (id % 2), hp: 1},
-        );
-        id++;
-    }
-}
+const gzip = <(s: string) => Promise<Buffer>>promisify(zlib.gzip);
 
-class GameRunner {
-    listeners: Map<ClientID, Client>;
-    players: Map<ClientID, TeamID>;
-    state: { state: "setup", teams: Map<ClientID, TeamData>, nextTeamID: number } |
-           { state: "play", game: Game };
+/**
+ * Represents a game that hasn't started yet.
+ * TODO: this class should be combined with GameRunner somehow
+ */
+export class Lobby {
+    /**
+     * The ID of this game.
+     */
+    id: GameID;
 
-    constructor() {
-        this.listeners = new Map();
-        this.players = new Map();
-        this.state = { state: 'setup', teams: new Map(), nextTeamID: 1 };
-    }
+    /**
+     * The teams passed in the 'create_game' message.
+     */
+    requiredTeams: TeamData[];
 
-    addClient(client: Client) {
-        console.log(client.id + " |");
-        if (this.listeners.has(client.id)) {
-            throw new Error("Client already in game: "+client.id);
+    /**
+     * The map the game will be played on.
+     */
+    map: MapFile;
+
+    /**
+     * The connected players.
+     */
+    playerTeams: [Client, TeamData][];
+
+    /**
+     * Clients that care about the end of this game.
+     */
+    observers: Client[];
+
+    spectators: Client[];
+    debug: boolean;
+    isPickup: boolean;
+    timeoutMS: number;
+
+    constructor(id: GameID,
+                create: CreateGame,
+                spectators: Client[],
+                debug: boolean,
+                client?: Client) {
+        this.id = id;
+        this.debug = debug;
+        this.timeoutMS = create.timeoutMS;
+
+        // if no teams have keys, this is a pickup game
+        this.isPickup = create.teams ?
+            create.teams.find(t => t.key !== undefined) !== undefined
+            : true;
+
+        if (typeof create.map === "string") {
+            throw new Error("server map listing unimplemented");
+        } else {
+            this.map = create.map;
         }
-        this.listeners.set(client.id, client);
-        client.onCommand(this.handleCommand.bind(this));
-        client.onClose(this.handleClose.bind(this));
 
-        if (this.players.size == 2 && this.listeners.size == 3) {
-            this.startGame();
-        }
-    }
-
-    handleCommand(command: IncomingCommand, client: Client) {
-        if (command.command === 'login' && this.state.state === 'setup') {
-            if (this.players.has(client.id)) {
-                throw new Error("Can't log in twice!");
+        if (create.teams) {
+            this.requiredTeams = create.teams;
+        } else {
+            this.requiredTeams = [];
+            for (let i = 0; i < this.map.teamCount; i++) {
+                this.requiredTeams.push({
+                    teamID: i+1,
+                    // will be overwritten by login since key is not set
+                    name: "UNKNOWN",
+                });
             }
+        }
 
-            // simple way to assign a consecutive team to every player
-            const team = {
-                id: this.state.nextTeamID,
-                name: command.name
+        this.playerTeams = []
+        this.observers = [];
+        if (client && create.sendReplay) {
+            this.observers.push(client);
+        }
+
+        this.spectators = spectators;
+    }
+
+    /**
+     * Handle a login message.
+     */
+    login(login: Login, client: Client): GameRunner | undefined {
+        for (let [client_, team] of this.playerTeams) {
+            if (client_.id == client.id) {
+                throw new ClientError("client already connected!");
+            }
+        }
+
+        for (let i = 0; i < this.requiredTeams.length; i++) {
+            const requiredTeam = this.requiredTeams[i];
+            if (login.key !== requiredTeam.key) {
+                continue;
+            }
+            let name;
+            if (requiredTeam.key !== undefined) {
+                // key is set, override name
+                name = requiredTeam.name;
+            } else {
+                name = login.name;
+            }
+            let newTeam = {
+                name: name,
+                teamID: requiredTeam.teamID
             };
-            this.state.teams.set(client.id, team);
-            this.players.set(client.id, team.id);
-            this.state.nextTeamID++;
+            // assign player to team
+            this.playerTeams.push([client, newTeam]);
+            this.requiredTeams.splice(i, 1);
 
             let confirmation: LoginConfirm = {
-                command: "login_confirm",
-                id: team.id,
-                name: team.name,
+                command: "loginConfirm",
+                gameID: this.id,
+                teamID: newTeam.teamID,
             };
             client.send(confirmation);
 
-            if (this.players.size == 2 && this.listeners.size == 3) {
-                this.startGame();
+            for (let observer of this.observers) {
+                observer.send({
+                    command: 'playerConnected',
+                    team: newTeam.teamID
+                });
             }
-        } else if (command.command === 'make_turn' && this.state.state === 'play') {
-            const teamID = this.players.get(client.id);
-            if (teamID === undefined) {
-                throw new Error("non-player client can't make turn: "+client.id);
+
+            if (this.requiredTeams.length == 0) {
+                return new GameRunner(this.id,
+                    this.map,
+                    this.playerTeams,
+                    this.observers,
+                    this.spectators,
+                    this.debug,
+                    this.timeoutMS
+                );
+            } else {
+                return undefined;
             }
-            const diff = this.state.game.makeTurn(teamID, command.turn, command.actions);
-            this.handleDiff(diff);
+        }
+        if (login.key) {
+            throw new ClientError("incorrect key: "+login.key);
         } else {
-            throw new Error("Invalid command!");
+            throw new Error("lobby already full?");
         }
     }
 
-    startGame() {
-        if (this.state.state !== "setup") {
-            throw new Error("Game already running!");
+    deleteClient(id: ClientID): boolean {
+        for (let i = 0; i < this.observers.length; i++) {
+            if (this.observers[i].id == id) {
+                this.observers.splice(i, 1);
+            }
         }
-
-        let teams: TeamData[] = Array.from(this.state.teams.values());
-        // add the neutral team
-        teams.push(NEUTRAL_TEAM);
-        teams.sort((a,b) => a.id - b.id);
-
-        this.broadcast({
-            command: 'start',
-            map: DEFAULT_MAP,
-            teams: teams
-        });
-        this.state = {
-            state: 'play',
-            game: new Game(DEFAULT_MAP, teams)
+        for (let i = 0; i < this.playerTeams.length; i++) {
+            if (this.playerTeams[i][0].id == id) {
+                // client was playing, we need to shutdown now
+                return true;
+            }
         }
-
-        let diff = this.state.game.addInitialEntitiesAndSectors(DEFAULT_ENTITIES);
-        this.handleDiff(diff);
-    }
-
-    handleClose(client: Client) {
-        if (this.players.has(client.id)) {
-            throw new Error("Player disconnected: ");
-        }
-
-        this.listeners.delete(client.id);
-
-        console.log(client.id + ' X');
-    }
-
-    broadcast(command: OutgoingCommand) {
-        this.listeners.forEach((client) => {
-            // TODO only serialize once
-            client.send(command);
-        });
-    }
-
-    handleDiff(diff: NextTurn) {
-        if (this.state.state == "setup") throw new Error("Can't broadcast diff in setup");
-
-        this.broadcast(diff);
+        return false;
     }
 }
 
-const gameRunner = new GameRunner();
+export class GameRunner {
+    id: GameID;
+    playerClients: Client[];
+    players: Map<ClientID, TeamID>;
+    game: Game;
+    pastTurns: NextTurn[];
+    observers: Client[];
+    started: boolean;
+    winner?: TeamData;
+    spectators: Client[];
 
-console.log('tcp listening on :6172');
-let tcpServer = new net.Server((socket) => {
-    const client = Client.fromTCP(socket);
-    gameRunner.addClient(client);
-});
-tcpServer.listen(6172);
+    // length of timeouts
+    timeoutMS: number;
+    // timestamp of last turn
+    lastTurnMS: number;
+    // the handle of the timeout that was created to time out the last turn
+    timeoutHandle?: NodeJS.Timer;
 
-console.log('ws listening on :6173');
-let httpServer = new http.Server();
-let wsServer = new ws.Server({ server: httpServer });
-wsServer.on('connection', (socket) => {
-    gameRunner.addClient(Client.fromWeb(socket));
-});
-httpServer.listen(6173);
+    constructor(
+        id: GameID,
+        map: MapFile,
+        playerTeams: [Client, TeamData][],
+        observers: Client[],
+        spectators: Client[],
+        debug: boolean,
+        timeoutMS: number
+    ) {
+        this.id = id;
+        this.playerClients = [];
+        this.players = new Map();
+        this.timeoutMS = timeoutMS;
+        const teams: TeamData[] = [];
+        for (let [client, team] of playerTeams) {
+            this.playerClients.push(client);
+            this.players.set(client.id, team.teamID);
+            teams.push(team);
+        }
+        teams.push(NEUTRAL_TEAM);
+        // ensure teams are sorted
+        teams.sort((a,b) => a.teamID - b.teamID);
 
-console.log('ready.');
+        this.game = new Game(id, map, teams, debug);
+        this.observers = observers;
+        this.pastTurns = [];
+        this.started = false;
+        this.spectators = spectators;
+    }
 
+    async broadcast(command: OutgoingCommand) {
+        // add to our listeners
+        Client.sendToAll(command, this.playerClients);
+        // send to global spectators
+        Client.sendToAll(command, this.spectators);
+    }
+
+    async addSpectator(spectator: Client) {
+        if (this.started) {
+            // note: client may start receiving turns before they receive the replay
+            // that's fine, they just need to store them somewhere
+            const replay = await this.makeReplay()
+            spectator.send(replay);
+        }
+    }
+
+    async start() {
+        const start: GameStart = {
+            command: "start",
+            gameID: this.id,
+            initialState: this.game.initialState,
+            teams: this.game.teams,
+            timeoutMS: this.timeoutMS
+        };
+        await this.broadcast(start);
+        this.started = true;
+        const firstTurn = this.game.firstTurn();
+        await this.broadcast(firstTurn);
+        this.pastTurns.push(firstTurn);
+    }
+
+    /**
+     * ugh
+     */
+    private getClientForTeam(id: TeamID): Client {
+        let cl;
+        for (let [clientID, teamID] of this.players.entries()) {
+            if (teamID === id) {
+                cl = clientID;
+            }
+        }
+        if (cl === undefined) {
+            throw new Error('no such team: '+id);
+        }
+        for (let client of this.playerClients) {
+            if (client.id === cl) {
+                return client;
+            }
+        }
+        throw new Error('no such client??: '+cl);
+    }
+
+    startTimeout() {
+        // this is cancelled if timeout isn't hit
+        this.timeoutHandle = setTimeout(async () => {
+            this.timeoutHandle = undefined;
+            let client = this.getClientForTeam(this.game.nextTeam);
+            let turn = this.game.turn + 1;
+            client.send({command: 'missedTurn', gameID: this.game.id, turn: turn});
+            // make fake turn
+            await this.makeTurn({
+                command: 'makeTurn',
+                gameID: this.id,
+                turn: turn,
+                actions: []
+            }, client);
+        }, this.timeoutMS);
+    }
+
+    async makeTurn(turn: MakeTurn, client: Client) {
+        const teamID = this.players.get(client.id);
+        if (teamID === undefined) {
+            throw new ClientError("non-player client can't make turn: "+client.id);
+        }
+        const nextTurn = this.game.makeTurn(teamID, turn.turn, turn.actions);
+        if (this.timeoutHandle) {
+            clearTimeout(this.timeoutHandle);
+        }
+
+        await this.broadcast(nextTurn);
+
+        if (process.env.BATTLECODE_DEBUG) {
+            await this.broadcast(this.game.makeKeyframe());
+        }
+
+        this.pastTurns.push(nextTurn);
+
+        if (nextTurn.winnerID) {
+            this.winner = this.game.teams[nextTurn.winnerID];
+        } else {
+            this.startTimeout();
+        }
+    }
+
+    async makeReplay(): Promise<GameReplay> {
+        let gzipped = await this.makeGzippedMatchData();
+        const base64 = gzipped.toString('base64');
+
+        return {
+            command: "gameReplay",
+            matchData: base64,
+            id: this.id
+        }
+    }
+
+    async makeGzippedMatchData(): Promise<Buffer> {
+        const soFar: MatchData = {
+            version: "battlecode 2017 hackathon match",
+            initialState: this.game.initialState,
+            gameID: this.id,
+            teams: this.game.teams,
+            turns: this.pastTurns,
+            winner: this.winner ? this.winner.teamID : undefined
+        };
+
+        // TODO: do this in another process so we don't block running games?
+        const json = JSON.stringify(soFar);
+        return gzip(json);
+    }
+
+    // returns whether the game should be cancelled because the client shutdown
+    deleteClient(id: ClientID): boolean {
+        if (this.winner !== undefined) {
+            // no need to cancel
+            return false;
+        }
+        if (this.players.has(id)) {
+            // client was playing, we need to shutdown now
+            if (this.timeoutHandle) {
+                clearTimeout(this.timeoutHandle);
+            }
+            return true;
+        }
+        for (let i = 0; i < this.observers.length; i++) {
+            if (this.observers[i].id === id) {
+                this.observers.splice(i, 1);
+                break;
+            }
+        }
+        return false;
+    }
+}
+
+const colors = [
+    chalk.blue,
+    chalk.cyan,
+    chalk.green,
+    chalk.magenta,
+    chalk.yellow,
+    chalk.blueBright,
+    chalk.cyanBright,
+    chalk.greenBright,
+    chalk.magentaBright,
+    chalk.yellowBright,
+];
+const prettyID = (id: string | undefined): string => {
+    if (!id) return chalk.underline('unknown');
+    let hash = 5381;
+    let i = id.length;
+    while (i) hash = (hash * 33) ^ id.charCodeAt(--i);
+    return colors[Math.abs(hash) % colors.length](id.slice(0, 8));
+};
+
+export interface ServerOpts {
+    tcpPort: number;
+    wsPort: number;
+    unixSocket: string | undefined;
+
+    debug: boolean;
+
+    log: (string) => void;
+    error: (string) => void;
+}
+
+export default class Server {
+    games: Map<GameID, Lobby | GameRunner> = new Map();
+    playing: Map<ClientID, GameID> = new Map();
+    spectators: Client[] = [];
+
+    tcp?: net.Server;
+    unix?: net.Server;
+    ws?: ws.Server;
+
+    opts: ServerOpts
+
+    log: (s: string) => void;
+    error: (s: string) => void;
+
+    mapNames: string[];
+
+    constructor(opts: ServerOpts) {
+        this.opts = opts;
+        this.log = opts.log;
+        this.error = opts.error;
+    }
+
+    async start() {
+        await this.updateMaps();
+
+        this.log(`TCP listening on :${this.opts.tcpPort}`);
+        this.tcp = new net.Server((socket: net.Socket) => {
+            const client = Client.fromTCP(socket);
+            this.log(`Client connected via tcp: ${prettyID(client.id)}`);
+            client.onCommand(this.handleCommand);
+            client.onClose(this.handleClose);
+        });
+        this.tcp.listen(this.opts.tcpPort);
+
+        // We're not running on windows
+        if (this.opts.unixSocket) {
+            this.log(`Unix raw socket listening on ${this.opts.unixSocket}`);
+            if (fs.existsSync(this.opts.unixSocket)) {
+                fs.unlinkSync(this.opts.unixSocket);
+            }
+            let unixServer = new net.Server((socket: net.Socket) => {
+                const client = Client.fromTCP(socket);
+                this.log(`Client connected via unix raw socket: ${prettyID(client.id)}`);
+                client.onCommand(this.handleCommand);
+                client.onClose(this.handleClose);
+            });
+            unixServer.listen(this.opts.unixSocket);
+        }
+
+        this.log(`WebSocket listening on :${this.opts.wsPort}`);
+        let httpServer = new http.Server();
+        this.ws = new ws.Server({ server: httpServer });
+        this.ws.on('connection', (socket: ws) => {
+            const client = Client.fromWeb(socket);
+            this.log(`WebSocket client connected: ${prettyID(client.id)}`);
+            client.onCommand(this.handleCommand);
+            client.onClose(this.handleClose);
+        });
+        httpServer.listen(this.opts.wsPort);
+
+        process.on('SIGINT', () => {
+            this.log('Shutting down gracefully.');
+            let promises = new Array<Promise<undefined>>();
+            for (let game of this.games.values()) {
+                if (game instanceof Lobby) {
+                    this.log(`Cancelling game ${prettyID(game.id)} (not started)`);
+                } else {
+                    this.log(`Saving game ${prettyID(game.id)} unfinished`);
+                    promises.push(this.saveGame(game));
+                }
+            }
+            Promise.all(promises).then(() => {
+                if (promises.length > 0) {
+                    this.log('Done writing match files.')
+                }
+                process.exit(0);
+            });
+        });
+    }
+
+    async updateMaps() {
+        await this.ensureDefaultMaps();
+        this.mapNames = await readdirRecursive(paths.MAPS, '.json');
+        this.mapNames.sort();
+    }
+
+    async ensureDefaultMaps() {
+        let defaults = await readdirRecursive(paths.PACKAGED_MAPS, '.json');
+        const defaultPath = path.join(paths.MAPS, 'default');
+        if (!await exists(defaultPath)) {
+            await mkdir(defaultPath);
+        }
+ 
+        await Promise.all(defaults.map(async (m) => {
+            let src = path.join(paths.PACKAGED_MAPS, m);
+            let copy = path.join(defaultPath, m);
+            let isCopied = await exists(copy)
+            if (!isCopied || (await stat(src)).mtime.getTime() > (await stat(copy)).mtime.getTime()) {
+                this.log(`Copying map ${m} to ${copy}`);
+                let contents = await readFile(src);
+                await writeFile(copy, contents);
+            }
+        }));
+    }
+
+    async loadMap(mapName: string): Promise<MapFile> {
+        let mapData = await readFile(path.join(paths.MAPS, mapName));
+
+        // TODO validate
+        let map = <MapFile> JSON.parse(mapData.toString());
+        map.mapName = mapName;
+
+        return map;
+    }
+
+    private async saveGame(game: GameRunner) {
+        let start = Date.now();
+        let contents = await game.makeGzippedMatchData()
+        let teamnames = game.game.teams.slice(1).map(t => t.name).join('-')
+
+        // map name may include slashes
+        let sanitizedMapName = <string>game.game.initialState.mapName;
+        sanitizedMapName = sanitizedMapName.replace('/', '-').slice(0, sanitizedMapName.length - '.json'.length);
+
+        let filename = `${teamnames}-${sanitizedMapName}-${game.id}.bch18`;
+
+        let filepath = path.join(paths.REPLAYS, filename);
+        await writeFile(filepath, contents);
+        let end = Date.now();
+        this.log(`Wrote ${filename} in ${Math.ceil(end - start)} ms`);
+        return undefined;
+    }
+
+    private pickupLock = new Mutex();
+    private async findPickupGame(): Promise<GameID> {
+        // note: we need to mutex this code so that multiple games aren't
+        // started at the same time
+        let lock = await this.pickupLock.acquire();
+
+        for (let [id, runner] of this.games.entries()) {
+            if (runner instanceof Lobby && runner.isPickup) {
+                lock.release();
+                return id;
+            }
+        }
+        
+        let pickup = new Lobby(
+            uuid(),
+            {
+                command: "createGame",
+                map: await this.loadMap(this.mapNames[Math.floor(Math.random() * this.mapNames.length)]),
+                sendReplay: false,
+                timeoutMS: 100
+            },
+            this.spectators,
+            this.opts.debug
+        );
+        this.games.set(pickup.id, pickup);
+        this.log(`Created pickup game ${prettyID(pickup.id)} on map ${pickup.map.mapName}`);
+        lock.release();
+        return pickup.id;
+    }
+
+    private handleCommand = async (command: IncomingCommand, client: Client) => {
+        try {
+            switch (command.command) {
+            case "login":
+                await this.handleLogin(command, client);
+                break;
+            case "makeTurn":
+                await this.handleMakeTurn(command, client);
+                break;
+            case "spectateAll":
+                await this.handleSpectateAll(command, client);
+                break;
+            case "createGame":
+                await this.handleCreateGame(command, client);
+                break;
+            case "listMapsRequest":
+                await this.handleListMapsRequest(command, client);
+                break;
+            case "listReplaysRequest":
+                await this.handleListReplaysRequest(command, client);
+                break;
+            case "replayRequest":
+                await this.handleReplayRequest(command, client);
+                break;
+            default:
+                client.send({
+                    command: "error",
+                    reason: "unimplemented command: "+(<any>command).command
+                })
+                this.error("unimplemented command: "+(<any>command).command);
+            }
+        } catch (e) {
+            if (e instanceof ClientError) {
+                // their fault
+                client.send({
+                    command: "error",
+                    reason: e.message
+                });
+                this.error(`Error from client ${prettyID(client.id)}: ${e.stack}`)
+            } else if (e instanceof Error) {
+                // our fault
+                client.send({
+                    command: "error",
+                    reason: "Internal server error: "+e.message
+                });
+                this.error(`Internal server error: ${e.stack}`);
+            } else {
+                // still our fault
+                client.send({
+                    command: "error",
+                    reason: "Internal server error: "+JSON.stringify(e)
+                });
+                this.error(`Internal server error: ${JSON.stringify(e)}`);
+            }
+        }
+    }
+
+    private handleClose = async (client: Client) => {
+        this.log(`Client disconnected: ${prettyID(client.id)}`)
+        let saves = new Array<Promise<void>>();
+        for (let game of this.games.values()) {
+            let broken = game.deleteClient(client.id);
+            if (broken) {
+                let type;
+                if (game instanceof GameRunner) {
+                    type = 'active game';
+                    saves.push(this.saveGame(game));
+                } else {
+                    type = 'lobby';
+                }
+
+                this.log(`Ending ${type} early: ${prettyID(game.id)}`);
+                this.games.delete(game.id);
+            }
+        }
+        for (let i = 0; i < this.spectators.length; i++) {
+            if (this.spectators[i].id == client.id) {
+                this.spectators.splice(i, 1);
+                break;
+            }
+        }
+        await Promise.all(saves);
+    };
+
+    private handleLogin = async (login: Login, client: Client) => {
+        let gameID: GameID;
+        if (login.gameID) {
+            gameID = login.gameID;
+        } else {
+            gameID = await this.findPickupGame();
+        }
+        const game = this.games.get(gameID);
+        if (game === undefined) {
+            throw new ClientError(`No such game: ${login.gameID}`);
+        }
+        if (game instanceof GameRunner) {
+            throw new ClientError(`Name already running: ${login.gameID}`);
+        } 
+        let runner = game.login(login, client);
+        this.playing.set(client.id, game.id);
+        this.log(`Client ${prettyID(client.id)} logged in as ${login.name} to ${prettyID(game.id)}`);
+
+        if (runner) {
+            // Lobby has converted into GameRunner
+            this.games.set(runner.id, runner);
+            runner.start();
+            this.log(`Game ${prettyID(game.id)} starting.`);
+        }
+    }
+
+    private handleMakeTurn = async (makeTurn: MakeTurn, client: Client) => {
+        let gameID = this.playing.get(client.id);
+        if (gameID === undefined) {
+            throw new ClientError("Client not playing a game");
+        }
+        let game = this.games.get(gameID);
+        if (!game) {
+            throw new Error(`Internal server error, no such game?: ${prettyID(gameID)}`);
+        }
+        if (game instanceof Lobby) {
+            throw new ClientError("Game hasn't started yet")
+        }
+        await game.makeTurn(makeTurn, client);
+
+        if (game.game.turn % 250 === 0) {
+            this.log(`Game ${prettyID(game.id)} passed turn ${game.game.turn}`);
+        }
+        if (game.winner) {
+            let client;
+            for (let [clientid, teamid] of game.players) {
+                if (teamid == game.winner.teamID) {
+                    client = clientid;
+                }
+            }
+
+            this.log(`Game ${prettyID(game.id)} finished, winner: ${prettyID(client)} (${game.winner.name})`);
+            await this.saveGame(game);
+            this.games.delete(game.id);
+        }
+    }
+
+    private handleSpectateAll = async (spectateAll: SpectateAll, client: Client) => {
+        this.log(`Client ${prettyID(client.id)} registered as spectator`);
+        this.spectators.push(client);
+        for (let game of this.games.values()) {
+            if (game instanceof GameRunner) {
+                await game.addSpectator(client);
+            }
+        }
+    }
+
+    private handleCreateGame = async (createGame: CreateGame, client: Client) => {
+        let lobby = new Lobby(uuid(), createGame, this.spectators, this.opts.debug, client);
+        this.games.set(lobby.id, lobby);
+        this.log(`Created ${lobby.isPickup? 'pickup ':''}game ${prettyID(lobby.id)} on map ${lobby.map.mapName}`);
+    }
+
+    private handleListMapsRequest = async (listMaps: ListMapsRequest, client: Client) => {
+        await this.updateMaps();
+
+        let maps = await Promise.all(this.mapNames.map(async (mapName) => {
+            let buffer = await readFile(path.join(paths.MAPS, mapName));
+            return buffer.toString();
+        }));
+
+        let response: ListMapsResponse = {
+            command: "listMapsResponse",
+            mapNames: this.mapNames,
+            maps: maps
+        }
+        client.send(response);
+    }
+
+    private handleListReplaysRequest = async (listReplaysRequest: ListReplaysRequest, client: Client) => {
+        let replayNames = await readdirRecursive(paths.REPLAYS, '.bch18');
+        replayNames.sort();
+
+        let response: ListReplaysResponse = {
+            command: "listReplaysResponse",
+            replayNames: replayNames,
+        }
+        client.send(response);
+    }
+
+    private handleReplayRequest = async (replayRequest: ReplayRequest, client: Client) => {
+        let buf = await readFile(path.join(paths.REPLAYS, replayRequest.name));
+
+        let response: ReplayResponse = {
+            command: "replayResponse",
+            name: replayRequest.name,
+            match: buf.toString()
+        }
+        client.send(response);
+    }
+}

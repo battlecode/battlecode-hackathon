@@ -538,6 +538,8 @@ export class Game {
             y: initial.y + action.dy,
         }
         if (isOutOfBound(targetLoc, this.initialState) || this.occupied.has(targetLoc.x, targetLoc.y)) {
+            console.log(targetLoc);
+            console.log(this.occupied.get(targetLoc.x, targetLoc.y));
             return "Not enough room to throw; must have at least one space free in direction of throwing: "
                 + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
@@ -563,6 +565,8 @@ export class Game {
         }
         if (target) {
             // Target may or may not be destroyed
+            let err = this.dealDamage(held.id, DAMAGES.recoil);
+            if (typeof err === "string") return err;
             if (target.type === "thrower") {
                 let err = this.dealDamage(target.id, DAMAGES.thrower);
                 if (typeof err === "string") return err;
@@ -584,6 +588,12 @@ export class Game {
         // damage held unit if unit lands on dirt
         if (this.getTile(landloc) === "D") {
             this.dealDamage(held.id, DAMAGES.dirt);
+        }
+        if(held.id === 146) {
+            console.log(target);
+            console.log(held);
+            console.log(targetLoc);
+            console.log(landloc);
         }
         if(held.hp >0)
             this.occupied.set(held.location.x, held.location.y, held.id);

@@ -424,7 +424,7 @@ export interface GameReplay {
 
 export interface PlayerConnected {
     command: "playerConnected",
-
+    id: GameID;
     team: TeamID;
 }
 

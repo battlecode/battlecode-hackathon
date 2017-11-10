@@ -186,7 +186,8 @@ export class Lobby {
 
             Client.sendToAll({
                 command: 'playerConnected',
-                team: newTeam.teamID
+                team: newTeam.teamID,
+                id: this.id
             }, this.observers);
             this.status.connected++;
             Client.sendToAll(this.status, this.spectators);

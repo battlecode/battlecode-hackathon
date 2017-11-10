@@ -752,6 +752,10 @@ export default class Server {
         let lobby = new Lobby(uuid(), createGame, this.spectators, this.opts.debug, client);
         this.games.set(lobby.id, lobby);
         this.log(`Created ${lobby.isPickup? 'pickup ':''}game ${prettyID(lobby.id)} on map ${lobby.map.mapName}`);
+        client.send({
+            command: "createGameConfirm",
+            gameID: lobby.id
+        });
     }
 
     private handleListMapsRequest = async (listMaps: ListMapsRequest, client: Client) => {

@@ -121,16 +121,16 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
         if (this.state.entData) {
             let data = this.state.entData as schema.EntityData;
             return <div style={`position: fixed; bottom: 50px;
-                left: 50px; border: solid 5px;`}>
-                {data.id}
+                left: 50px; border: gray solid 3px; font-family: ourfont; padding: 3px;`}>
+                hp: {data.id}
                 <br/>
-                {data.type}
+                type: {data.type}
                 <br/>
-                {JSON.stringify(data.location)}
+                location: {`(${data.location.x},${data.location.y})`}
                 <br/>
-                {data.hp}
+                hp: {data.hp}
                 <br/>
-                {(data.cooldownEnd || this.props.gameState.turn) - this.props.gameState.turn}
+                cooldown: {(data.cooldownEnd || this.props.gameState.turn) - this.props.gameState.turn}
             </div>;
         } else {
             return <div />

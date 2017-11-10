@@ -31,6 +31,7 @@ import { Game } from './game';
 import { Client, ClientID } from './client';
 import * as paths from './paths';
 import Mutex from './mutex';
+import readdirRecursive from './readdirrecursive';
 
 import * as net from 'net';
 import * as http from 'http';
@@ -776,34 +777,4 @@ export default class Server {
         }
         client.send(response);
     }
-}
-
-const readdirRecursive = async (topRoot: string, extension: string): Promise<string[]> => {
-    let paths = new Array<string>();
-    let stack = new Array<[string, Promise<string[]>]>();
-
-    stack.push([topRoot, readdir(topRoot)]);
-
-    while (stack.length > 0) {
-        let next = stack.pop();
-        if (next === undefined) continue;
-
-        let [root, filesp] = next;
-
-        let files = await filesp;
-        files = files.map(f => path.join(root, f));
-
-        let stats = await Promise.all(files.map(f => stat(f)));
-
-        for (let i = 0; i < files.length; i++) {
-            if (stats[i].isDirectory()) {
-                stack.push([files[i], readdir(files[i])]);
-            } else if (files[i].endsWith(extension)) {
-                paths.push(path.relative(topRoot, files[i]));
-            }
-        }
-    }
-
-    paths.sort();
-    return paths;
 }

@@ -29,7 +29,7 @@ s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
 MAX_GAMES = 2
-INIT_TIME = 10
+INIT_TIME = 60
 
 ELO_K = 20
 ELO_START = 1200
@@ -243,7 +243,7 @@ while True:
         for game in running_games:
             for match in game['matches']:
                 timePassed = (datetime.datetime.now() - game['start']).total_seconds()
-                if not all(match['connected']) and timePassed > INIT_TIME:
+                if not all(match['connected']) and match['winner'] is None and timePassed > INIT_TIME:
                     winners = []
                     for i in range(2):
                         if match['connected'][i]:

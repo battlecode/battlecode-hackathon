@@ -101,7 +101,6 @@ class Sandbox:
 
     def start(self, shell_command):
         shell_command = "docker run -d -v "+self.working_directory+":"+self.working_directory+" --cpus='1' --memory='256m' --memory-swap='256m' --privileged=true 817fdb26d5bf sh -c \'" + shell_command + " " + self.docker_ip + " \'"
-        print(shell_command)
 
         if self.is_alive:
             raise SandboxError("Tried to run command with one in progress.")
@@ -138,6 +137,8 @@ class Sandbox:
 
         """
         
+        if self.stdout_queue.empty():
+            return
         key = self.stdout_queue.get(block=True, timeout=10)
         try:
             os.system("docker container kill " + key + " > /dev/null")
@@ -147,7 +148,7 @@ class Sandbox:
         self.command_process.wait()
         self.child_queue.put(None)
         
-        shutil.rmtree(self.working_directory)
+        os.system("rm -rf " + self.working_directory)
 
     def retrieve(self):
         """Copy the working directory back out of the sandbox."""

@@ -6,6 +6,7 @@ export type GameStatus = 'waiting' | 'running' | 'finished';
 export interface ActiveGameInfo {
     status: GameStatus;
     mapName: string;
-    playerOne: string;
-    playerTwo: string;
+    playerOne?: string;
+    playerTwo?: string;
+    closeActiveGame: () => void;
 };

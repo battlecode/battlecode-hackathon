@@ -15,6 +15,7 @@ import { Stats } from './components/stats';
 import { Minimap } from './components/minimap';
 import { TopBar } from './components/topbar';
 import { ActiveGamesList } from './components/active-games-list';
+import { ActiveGameInfo } from './types';
 
 require('purecss/build/pure.css');
 require('./style.css');
@@ -78,7 +79,7 @@ let lastUpdateTime: number = performance.now();
 let turnsPerSecond: number = 10;
 let isPlaying: boolean = false;
 
-let activeGames = [];
+let activeGames: {[gameID: string]: ActiveGameInfo} = {};
 
 ws.onclose = (event) => {
     console.log('ws connection closed');
@@ -103,12 +104,22 @@ ws.onerror = (err) => {
 };
 ws.onmessage = (message) => {
     // TODO validate?
+    console.log(message);
     let command = JSON.parse(message.data) as schema.OutgoingCommand;
     if (command.command === "listMapsResponse") {
         maps = command.mapNames;
     }
     if (command.command === "listReplaysResponse") {
         replays = command.replayNames;
+    }
+    if (command.command === "createGameConfirm") {
+        if (!(command.gameID in activeGames)) {
+            activeGames[command.gameID] = {
+                status: 'waiting',
+                mapName: '1-136',
+                closeActiveGame: getCloseActiveGame(command.gameID),
+            };
+        }
     }
     timelines.apply(command);
     for (let cb of updateCbs) {
@@ -124,6 +135,7 @@ const createGame = (map: string) => {
         sendReplay: true,
         timeoutMS: 100,
     };
+    console.log("creating game");
     ws.send(JSON.stringify(create));
 }
 
@@ -179,6 +191,16 @@ const togglePlaybackRate = () => {
     render();
 }
 
+const getCloseActiveGame = (gameID: schema.GameID) => (() => {
+    delete activeGames[gameID];
+});
+
+activeGames['fred'] = {
+    status: 'running',
+    mapName: 'temple of anubis',
+    closeActiveGame: getCloseActiveGame('fred'),
+};
+
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());
 
@@ -202,7 +224,7 @@ const renderer = () => {
                     togglePlaybackRate={togglePlaybackRate}
                 />
                 <ActiveGamesList
-                    games={activeGames}
+                    games={Object.keys(activeGames).map((key) => activeGames[key])}
                 />
                 <div style={`position: relative;`}>
                     <RendererComponent gameState={timelines.timelines[gameID].current}

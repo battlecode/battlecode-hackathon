@@ -7,9 +7,23 @@ interface Props extends Inferno.Props {
     game: ActiveGameInfo;
 }
 
-export class ActiveGame extends Component<Props, {}> {
+interface State {
+    aboutToClose: boolean;
+}
 
-    formatStatus = (status: GameStatus) => {
+export class ActiveGame extends Component<Props, State> {
+
+    state: State;
+
+    constructor(props: Props) {
+        super(props);
+        this.state = {
+            aboutToClose: false,
+        };
+    }
+
+    formatStatus = () => {
+        const status = this.props.game.status;
         if (status == 'waiting') {
             return 'Waiting for players...';
         } else if (status == 'running') {
@@ -18,12 +32,28 @@ export class ActiveGame extends Component<Props, {}> {
             return 'Finished!';
         }
     };
+    
+    onCloseClick = () => {
+        this.state.aboutToClose = true;
+    }
+
+    onCloseCancelClick = () => {
+        this.state.aboutToClose = false;
+    }
+
+    onCloseConfirmClick = () => {
+        this.props.game.closeActiveGame();
+    }
 
     render() {
         return (
             <div class="dialog">
                 <div>
-                    {this.formatStatus(this.props.game.status)}
+                    {this.state.aboutToClose ? (
+                        <span class="red">Are you sure?</span>
+                    ) : (
+                        <span>Status: {this.formatStatus()}</span>
+                    )}
                 </div>
                 <div>
                     Map: {this.props.game.mapName}
@@ -33,8 +63,17 @@ export class ActiveGame extends Component<Props, {}> {
                     vs.
                     <span class="blue"> {this.props.game.playerTwo}</span>
                 </div>
-                <button class="blue thin">View</button>
-                <button class="red thin">Close</button>
+                {this.state.aboutToClose ? (
+                     <span>
+                         <button class="red thin" onclick={this.onCloseConfirmClick}>Yes</button>
+                         <button class="green thin" onclick={this.onCloseCancelClick}>No</button>
+                     </span>
+                ) : (
+                     <span>
+                         <button class="blue thin">View</button>
+                         <button class="red thin" onclick={this.onCloseClick}>Close</button>
+                     </span>
+                )}
             </div>
         );
     }

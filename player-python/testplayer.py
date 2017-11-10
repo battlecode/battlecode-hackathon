@@ -34,10 +34,12 @@ for state in game.turns():
         statue = nearest_glass_state(state, entity)
         if(statue != None):
             direction = entity.location.direction_to(statue.location)
+            print(type(direction))
             if entity.can_throw(direction):
                 entity.queue_throw(direction)
 
-        for direction in battlecode.Direction.all():
+        for direction in battlecode.Direction.directions():
+            print(type(direction))
             if entity.can_move(direction):
                 entity.queue_move(direction)
 

@@ -2,7 +2,6 @@ from __future__ import print_function
 
 '''Play battlecode hackathon games.'''
 
-from enum import Enum
 import socket
 import math
 import io
@@ -48,16 +47,46 @@ def direction_rotate_degrees_clockwise(direction, degrees):
     directions = list(Direction.all())
     return directions[direction.value+degrees//45%8]
 
-class Direction(Enum):
+class Direction(object):
     ''' This is an enum for direction '''
-    NORTH =      ( 0,  1)
-    NORTH_EAST = ( 1,  1)
-    EAST =       ( 1,  0)
-    SOUTH_EAST = ( 1, -1)
-    SOUTH =      ( 0, -1)
-    SOUTH_WEST = (-1, -1)
-    WEST =       (-1,  0)
-    NORTH_WEST = (-1,  1)
+    @staticmethod
+    def SOUTH_WEST():
+        return Direction(-1, -1)
+
+    @staticmethod
+    def SOUTH_EAST():
+        return Direction(1, -1)
+
+    @staticmethod
+    def SOUTH():
+        return Direction(0, -1)
+
+    @staticmethod
+    def NORTH_EAST():
+        return Direction(1,  1)
+
+    @staticmethod
+    def NORTH():
+        return Direction(0,  1)
+
+    @staticmethod
+    def NORTH_WEST():
+        return Direction(-1,  1)
+
+    @staticmethod
+    def EAST():
+        return Direction(1, 0)
+
+    @staticmethod
+    def WEST():
+        return Direction(-1,  0)
+
+    @staticmethod
+    def directions():
+        return [Direction.SOUTH_WEST(), Direction.SOUTH(),
+                Direction.SOUTH_EAST(), Direction.EAST(),
+                Direction.NORTH_EAST(), Direction.NORTH(),
+                Direction.NORTH_WEST(), Direction.WEST()]
 
     def __init__(self, dx, dy):
         self.dx = dx
@@ -67,29 +96,29 @@ class Direction(Enum):
     def from_delta(dx, dy):
         if dx < 0:
             if dy < 0:
-                return Direction.SOUTH_WEST
+                return Direction.SOUTH_WEST()
             elif dy == 0:
-                return Direction.WEST
+                return Direction.WEST()
             elif dy > 0:
-                return Direction.NORTH_WEST
+                return Direction.NORTH_WEST()
         elif dx == 0:
             if dy < 0:
-                return Direction.SOUTH
+                return Direction.SOUTH()
             elif dy == 0:
                 raise BattlecodeError("not a valid delta: "+str(dx)+","+str(dy))
             elif dy > 0:
-                return Direction.NORTH
+                return Direction.NORTH()
         elif dx > 0:
             if dy < 0:
-                return Direction.SOUTH_EAST
+                return Direction.SOUTH_EAST()
             elif dy == 0:
-                return Direction.EAST
+                return Direction.EAST()
             elif dy > 0:
-                return Direction.NORTH_EAST
+                return Direction.NORTH_EAST()
 
     @staticmethod
     def all():
-        for direction in Direction:
+        for direction in Direction.directions():
             yield direction
 
 class Entity(object):
@@ -767,7 +796,9 @@ class Game(object):
 
         self._recv_queue = Queue()
 
-        threading.Thread(target=self._recv_thread, name='Battlecode Communication Thread').start()
+        commThread = threading.Thread(target=self._recv_thread, name='Battlecode Communication Thread')
+        commThread.daemon = True
+        commThread.start()
 
         # handle login response
         resp = self._recv()

@@ -408,7 +408,7 @@ export class GameRunner {
             initialState: this.game.initialState,
             gameID: this.id,
             teams: this.game.teams,
-            turns: this.pastTurns,
+            turns: this.pastTurns.sort((a, b) => a.turn - b.turn),
             winner: this.winner ? this.winner.teamID : undefined
         };
 
@@ -832,7 +832,7 @@ export default class Server {
         let response: ReplayResponse = {
             command: "replayResponse",
             name: replayRequest.name,
-            match: buf.toString()
+            match: buf.toString('base64')
         }
         client.send(response);
     }

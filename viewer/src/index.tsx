@@ -14,58 +14,17 @@ import { RendererComponent } from './components/renderer';
 import { Stats } from './components/stats';
 import { Minimap } from './components/minimap';
 import { TopBar } from './components/topbar';
+import { ActiveGamesList } from './components/active-games-list';
+import { GameStatus, ActiveGameInfo } from './types';
 
 require('purecss/build/pure.css');
 require('./style.css');
-
-const testMap: schema.GameStart = {
-    gameID: 'test',
-    command: 'start',
-    initialState: {
-        mapName: 'test',
-        version: 'battlecode 2017 hackathon map',
-        teamCount: 2,
-        width: 10,
-        height: 10,
-        tiles: [
-            ['G', 'G', 'G', 'D', 'D', 'D', 'D', 'G', 'G', 'G'],
-            ['D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'D', 'D'],
-            ['D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'G', 'D'],
-            ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'G', 'D', 'D'],
-            ['D', 'G', 'G', 'D', 'D', 'D', 'D', 'G', 'G', 'G'],
-            ['G', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
-            ['D', 'G', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
-            ['D', 'D', 'G', 'D', 'D', 'D', 'D', 'G', 'G', 'G'],
-            ['D', 'D', 'G', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
-            ['G', 'G', 'D', 'D', 'D', 'D', 'D', 'D', 'G', 'D'],
-        ],
-        entities: [
-            { id: 0, type: 'thrower', teamID: 1, location: { x: 0, y: 0 }, hp: 10 },
-            { id: 1, type: 'thrower', teamID: 2, location: { x: 4, y: 9 }, hp: 10 },
-            { id: 2, type: 'hedge', teamID: 0, location: { x: 4, y: 8 }, hp: 10 },
-            { id: 3, type: 'statue', teamID: 1, location: { x: 5, y: 5 }, hp: 10 },
-            { id: 4, type: 'thrower', teamID: 1, location: { x: 6, y: 6 }, hp: 10, holding: 5 },
-            { id: 5, type: 'thrower', teamID: 2, location: { x: 6, y: 6 }, hp: 10, heldBy: 4 }
-        ],
-        sectorSize: 10,
-        sectors: [
-            { topLeft: { x: 0, y: 0 }, controllingTeamID: 0 }
-        ]
-    },
-    teams: [
-        { teamID: 0, name: 'neutral' },
-        { teamID: 1, name: 'A' },
-        { teamID: 2, name: 'B' }
-    ],
-    timeoutMS: 100,
-};
 
 let ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
     maxReconnectInterval: 5000
 });
 
 let timelines = new state.TimelineCollection();
-timelines.apply(testMap);
 window['timelines'] = timelines;
 
 let updateCbs = new Array<() => void>();
@@ -77,11 +36,14 @@ let lastUpdateTime: number = performance.now();
 let turnsPerSecond: number = 10;
 let isPlaying: boolean = false;
 
+let activeGames: {[gameID: string]: ActiveGameInfo} = {};
+
+let currentGameID: string | undefined;
+
 ws.onclose = (event) => {
     console.log('ws connection closed');
 };
 ws.onopen = (event) => {
-    console.log('connected');
     const spectate: schema.SpectateAll = {
         command: "spectateAll"
     };
@@ -107,7 +69,34 @@ ws.onmessage = (message) => {
     if (command.command === "listReplaysResponse") {
         replays = command.replayNames;
     }
-    timelines.apply(command);
+    if (command.command === "gameStatusUpdate") {
+        if (command.gameID in activeGames) {
+            if ((command.status == 'finished' || command.status == 'cancelled') || (command.status == 'running' && activeGames[command.gameID].status == 'lobby')) {
+                activeGames[command.gameID].status = command.status;
+            }
+        } else {
+            activeGames[command.gameID] = {
+                gameID: command.gameID,
+                status: command.status as GameStatus,
+                mapName: command.map,
+                closeActiveGame: getCloseActiveGame(command.gameID),
+                viewActiveGame: getViewActiveGame(command.gameID),
+            }
+        }
+        if (command.connected.length > 0) {
+            activeGames[command.gameID].playerOne = command.connected[0];
+        }
+        if (command.connected.length > 1) {
+            activeGames[command.gameID].playerTwo = command.connected[1];
+        }
+    }
+    if (command.command === "start") {
+        currentGameID = command.gameID;
+        isPlaying = true;
+    }
+    if (command.command != "gameReplay") {
+        timelines.apply(command, addNewGame);
+    }
     for (let cb of updateCbs) {
         cb();
     }
@@ -133,9 +122,8 @@ const loadReplay = (replay: string) => {
 }
 
 const timelineChangeRound = (round: number) => {
-    if (timelines.gameIDs.length > 0) {
-        let gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
-        timelines.timelines[gameID].load(round, render);
+    if (currentGameID) {
+        timelines.timelines[currentGameID].load(round, render);
     }
 }
 
@@ -148,20 +136,19 @@ const updateCurrentFrame = (time: number) => {
     const updateInterval = 1000 / turnsPerSecond;
     const thisInterval = time - lastUpdateTime;
     const numTurns = (thisInterval / updateInterval);
-    
+
     const end = () => {
         lastUpdateTime = time - (thisInterval % updateInterval);
         render();
         window.requestAnimationFrame(updateCurrentFrame);
     }
 
-    if (isPlaying && timelines.gameIDs.length > 0) {
-        const gameID = timelines.gameIDs[timelines.gameIDs.length - 1];
-        const timeline = timelines.timelines[gameID];
+    if (isPlaying && currentGameID) {
+        const timeline = timelines.timelines[currentGameID];
         const turnToLoad = Math.min(timeline.current.turn + Math.floor(numTurns), timeline.farthest.turn);
         const numTurnsToLoad = turnToLoad - timeline.current.turn;
-        if (turnToLoad >= 0) {
-            timelines.timelines[gameID].loadNextNTurns(numTurnsToLoad, end);
+        if (numTurnsToLoad > 0) {
+            timelines.timelines[currentGameID].loadNextNTurns(numTurnsToLoad, end);
         } else {
             end();
         }
@@ -176,42 +163,66 @@ const togglePlaybackRate = () => {
     render();
 }
 
+export const getCloseActiveGame = (gameID: schema.GameID) => (() => {
+    delete activeGames[gameID];
+    if (gameID == currentGameID) {
+        if (Object.keys(activeGames).length > 0) {
+            currentGameID = Object.keys(activeGames)[0];
+        } else {
+            currentGameID = undefined;
+        }
+    }
+});
+
+export const getViewActiveGame = (gameID: schema.GameID) => (() => {
+    currentGameID = gameID;
+});
+
+const addNewGame = (gameInfo: ActiveGameInfo) => {
+    const gameID = gameInfo.gameID;
+    if (!(gameID in activeGames)) {
+        activeGames[gameID] = gameInfo;
+    }
+    currentGameID = gameID;
+    isPlaying = true;
+}
+
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());
 
 const renderer = () => {
-    if (timelines.gameIDs.length > 0) {
-        let gameID = timelines.gameIDs[timelines.gameIDs.length - 1]
-        return (
-            <div>
-                <TopBar
-                    maps={maps}
-                    createGame={createGame}
-                    replays={replays}
-                    loadReplay={loadReplay}
-                    currentRound={timelines.timelines[gameID].current.turn}
-                    farthestRound={timelines.timelines[gameID].farthest.turn}
-                    maxRound={1000}
-                    changeRound={timelineChangeRound}
-                    turnsPerSecond={turnsPerSecond}
-                    isPlaying={isPlaying}
-                    togglePlaying={togglePlaying}
-                    togglePlaybackRate={togglePlaybackRate}
-                />
-                <div style={`position: relative;`}>
-                    <RendererComponent gameState={timelines.timelines[gameID].current}
-                        key={gameID}
-                        addUpdateListener={(cb) => updateCbs.push(cb)} />
-                    <div style="position: absolute; top: 100px; left: 0; z-index: 20000;">
-                        minimap test
-                        {timelines.gameIDs.map(id => <Minimap gameState={timelines.timelines[id].current} />)}
-                    </div>
-                </div>
-            </div>
-        );
-    } else {
-        return 'bananas';
-    }
+    return (
+        <div>
+            <TopBar
+                maps={maps}
+                createGame={createGame}
+                replays={replays}
+                loadReplay={loadReplay}
+                currentRound={currentGameID ? timelines.timelines[currentGameID].current.turn : 0}
+                farthestRound={currentGameID ? timelines.timelines[currentGameID].farthest.turn : 0}
+                maxRound={1000}
+                changeRound={timelineChangeRound}
+                turnsPerSecond={turnsPerSecond}
+                isPlaying={isPlaying}
+                togglePlaying={togglePlaying}
+                togglePlaybackRate={togglePlaybackRate}
+            />
+            <ActiveGamesList
+                games={Object.keys(activeGames).map((key) => activeGames[key])}
+            />
+            {currentGameID ? (
+                 <div style={`position: relative;`}>
+                     <RendererComponent gameState={timelines.timelines[currentGameID].current}
+                                        key={currentGameID}
+                                        addUpdateListener={(cb) => updateCbs.push(cb)} />
+                 </div>
+            ) : (
+                 <p>
+                     Welcome to the Battlehack Client! To begin, start a new game, or load an existing replay, using the above interface.
+                 </p>
+            )}
+        </div>
+    );
 }
 
 const render = frameDebounce(() => {

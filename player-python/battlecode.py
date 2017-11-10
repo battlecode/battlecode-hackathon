@@ -25,10 +25,6 @@ except:
 
 # pylint: disable = too-many-instance-attributes, invalid-name
 
-THROWER = 'thrower'
-HEDGE = 'hedge'
-STATUE = 'statue'
-
 GRASS = 'G'
 DIRT = 'D'
 
@@ -37,34 +33,50 @@ THROW_ENTITY_DAMAGE = 4
 THROW_ENTITY_RECOIL = 2
 THROW_ENTITY_DIRT = 1
 
+PICKUP_DELAY = 0
+THROW_DELAY = 10
+MOVEMENT_DELAY = 1
+BUILD_DELAY = 10
+
 # terminal formatting
 _TERM_RED = '\033[31m'
 _TERM_END = '\033[0m'
 
-def direction_rotate_degrees_clockwise(direction, degrees):
-    if __debug__:
-        assert (degrees %45 == 0), "Rotation must be a multiple of 45 degrees"
-
-    directions = list(Direction.all())
-    return directions[direction.value+degrees//45%8]
 
 class Direction(object):
     ''' This is an enum for direction '''
     @staticmethod
     def directions():
+        '''
+        returns an array of all compass directions. It starts with SOUTH_WEST
+        and proceeds counter-clockwise around the compass.
+        This array is deterministic.
+        Returns:
+            [Direction]: An array of all compass directions
+        '''
         return [Direction.SOUTH_WEST, Direction.SOUTH,
                 Direction.SOUTH_EAST, Direction.EAST,
                 Direction.NORTH_EAST, Direction.NORTH,
                 Direction.NORTH_WEST, Direction.WEST]
 
-    def __init__(self, dx, dy):
-        '''bees'''
-        self.dx = dx
-        '''fingle'''
-        self.dy = dy
-
     @staticmethod
     def from_delta(dx, dy):
+        '''
+        Initializes a Direction from a delta dx, dy. This finds the cardinal
+        direction closest to the desired delta.
+        Args:
+            dx (int): delta in x direction
+            dy (int): delta in y direction
+            Both arguments cannot be zero
+        Returns:
+            Direction: a new Direction for that delta
+        '''
+        # This is code to approximate the the closest movement
+        if abs(dx) >= 2.414*abs(dy):
+            dy = 0
+        elif abs(dy) >= 2.414*abs(dx):
+            dx = 0
+
         if dx < 0:
             if dy < 0:
                 return Direction.SOUTH_WEST
@@ -89,8 +101,77 @@ class Direction(object):
 
     @staticmethod
     def all():
+        '''
+        returns an generator to Directions
+        Returns:
+            Direction: An generator of all compass directions
+        '''
         for direction in Direction.directions():
             yield direction
+
+    def __eq__(self, other):
+        if type(other) is not Direction:
+            return False
+        return self.dx == other.dx and self.dy == other.dy
+
+    def __init__(self, dx, dy):
+        '''
+        Initialize a Direction with given delta x and delta y.
+        Args:
+            dx (int): the delta in the x direction which has to be in range 1,0,-1
+            dy (int): the delta in the y direction which has to be in range 1,0,-1
+
+        Returns:
+            Direction: A new direction with given dx and dy
+        '''
+
+        if __debug__:
+            assert dx<=1 and dx >= -1, "dx is not in the right range"
+            assert dy<=1 and dy >= -1, "dy is not in the right range"
+        self.dx = dx
+        self.dy = dy
+
+    def rotate_left(self):
+        '''
+        Return a direction that is 90 degrees left from the original.
+        Returns:
+            Direction: A new Direction rotated 90 degrees to the left
+        '''
+        return direction.rotate_counter_clockwise_degrees(90)
+
+    def rotate_right(self):
+        '''
+        Return a direction that is 90 degrees right from the original.
+        Returns:
+            Direction: A new Direction rotated 90 degrees to the right
+        '''
+        return direction.rotate_counter_clockwise_degrees(270)
+
+    def rotate_opposite(self):
+        '''
+        Return a direction that is 180 degrees rotated from the original.
+        Returns:
+            Direction: A new direction opposite to the original
+        '''
+        return direction.rotate_counter_clockwise_degrees(180)
+
+    def rotate_counter_clockwise_degrees(self, degrees):
+        '''Rotate an angle by given number of degrees.
+        Args:
+             degree (int): degree to rotate counter clockwise by. Must be
+                        degree%45==0
+
+        Returns:
+            Direction: a new rotated Direction
+        '''
+        if __debug__:
+            assert degrees%45==0
+        rotations = degrees//45
+        index = Direction.directions().index(self)
+        length = len(Direction.directions())
+        return Direction.directions()[(index+rotations)%length]
+
+
 
 '''The direction (-1, -1).'''
 Direction.SOUTH_WEST = Direction(-1, -1)
@@ -114,11 +195,25 @@ class Entity(object):
     An entity in the world: a Thrower, Hedge, or Statue.
 
     Do not modify the properties of this object; it won't do anything
-    Instead, call entity.queue_move() and other methods to tell the game to do something
-    next turn.
+    Instead, call the queue functions such as entity.queue_move() and other
+    methods to tell the game to do something next turn.
+    Attributes:
+        id (int): the id of a entity
+        type (string): String type of a given entity
+        team (Team): team of entity
+        hp (int): hp of entity
+        cooldown_end (int): turn when cooldown is 0
+        held_by (Entity): Entity holding this object. If not held held_by is
+                          None
+        holding (Entity): Entity held by this. If nothing is held holding is
+                          None
     '''
 
     def __init__(self, state):
+        '''
+        Do not initialize new entities. This will cause errors in your
+        bot.
+        '''
         self._state = state
 
         self.id = None
@@ -130,7 +225,7 @@ class Entity(object):
         self.holding_end = None
         self.held_by = None
         self.holding = None
-        self.disintegrated = False
+        self._disintegrated = False
 
     def __str__(self):
         contents = '<id:{},type:{},team:{},location:{},hp:{}'.format(
@@ -210,7 +305,11 @@ class Entity(object):
 
     @property
     def cooldown(self):
-        '''The number of turns left in this entity's cooldown.'''
+        '''
+         Returns:
+             int: The number of turns left in this entity's cooldown. If
+                there is no cooldown then is a 0.
+         '''
         if self.cooldown_end is None:
             return 0
         if self.cooldown_end <= self._state.turn:
@@ -219,41 +318,75 @@ class Entity(object):
         return self.cooldown_end - self._state.turn
 
     @property
-    def turns_until_drop(self):
-        '''The number of turns until this entity drops its held entity.'''
-
-    @property
-    def is_robot(self):
-        return self.type == THROWER
+    def is_thrower(self):
+        '''
+        Returns:
+            bool: True if a entity is a THROWER else False.
+        '''
+        return self.type == Entity.THROWER
 
     @property
     def is_statue(self):
-        return self.type == STATUE
+        '''
+        Returns:
+            bool: True if a entity is a STATUE else False.
+        '''
+        return self.type == Entity.STATUE
+
+    @property
+    def is_hedge(self):
+        '''
+        Returns:
+            bool: True if a entity is a HEDGE else False.
+        '''
+        return self.type == Entity.HEDGE
 
     @property
     def is_holding(self):
+        '''
+        Returns:
+            bool: True if holding an entity else False
+        '''
         return self.holding != None
 
     @property
     def is_held(self):
+        '''
+        Returns:
+            bool: True if held by an entity else False
+        '''
         return self.held_by != None
 
     @property
     def can_act(self):
-        ''' Returns true if this is a robot with no cooldown. If either is
-        false then this entity cannot perform any actions this turn.'''
-        return self.cooldown == 0 and self.is_robot and (self.held_by is None) and \
-                not self.disintegrated
+        '''
+        Returns:
+            bool: True if this unit can perform actions this turn.
+        '''
+        return self.cooldown == 0 and self.is_thrower and (self.held_by is None) and \
+                not self._disintegrated
 
     @property
     def can_be_picked(self):
-        ''' Returns true if the entitiy can be picked up. Otherwise returns
-        false'''
-
-        # Possible change this to
-        return self.is_robot and not self.is_holding and not self.is_held
+        '''
+        Returns:
+            bool: True if this entity can be picked up
+        '''
+        return self.is_thrower and not self.is_holding and not self.is_held
 
     def can_throw(self, direction):
+        '''
+        To throw an entity.
+        Self has to be holding a unit and self has to be able to act.
+        The adjacent square in the given direction has to be on the map and not
+        occupied.
+
+        Args:
+            direction (Direction): Direction this entity desires to throw its
+                                   held entity
+        Returns:
+            bool: True if this entity thrown in given direction
+        '''
         if not self.is_holding or not self.can_act:
             return
 
@@ -269,8 +402,12 @@ class Entity(object):
         return True
 
     def can_move(self, direction):
-        ''' Returns true if the robot can move in a given direction. False
-        otherwise.'''
+        '''
+        Args:
+            direction (Direction): Direction this entity desires to move in
+        Returns:
+            bool: True if a unit can move in this direction
+        '''
 
         if not self.can_act:
             return False
@@ -286,11 +423,28 @@ class Entity(object):
         return True
 
     def can_build(self, direction):
+        '''
+        This is true if there is no object in the adjacent tile in that
+        direction and the tile is on the map.
+        Args:
+            direction (Direction): Direction this entity desires to build in
+        Returns:
+            bool: True if a unit can build in this direction
+        '''
         return self.can_move(direction)
 
     def can_pickup(self, entity):
-        ''' Returns true if entity can pickup another entity in given
-        direction. Otherwise returns False.'''
+        '''
+        This is true if the other entity can be picked up which means.
+        The entity cannot be self.
+        Self cannot be holding anything, and the entity cannot be held
+        The two entities must be adjacent.
+        The entity cannot has to be a THROWER.
+        Args:
+            entity (Entity): The entity this entity desires to pickup
+        Returns:
+            bool: True if this can pickup said entity
+        '''
 
         if __debug__:
             assert isinstance(entity, Entity), 'Parameter ' + str(entity) + \
@@ -307,19 +461,25 @@ class Entity(object):
 
         distance_to = self.location.distance_to_squared(entity.location)
         if entity == None or not entity.can_be_picked or not distance_to <=2 or \
-            entity.disintegrated:
+            entity._disintegrated:
             return False
         else:
             return True
 
     def queue_move(self, direction):
-        '''Queues a move, so that this object will move one square in given
-        direction in the next turn.'''
-
+        '''
+        Queues Move to take place next turn. Throws an assertion error if cannot
+        move in given direction.
+        Args:
+            direction (Direction): Direction this entity desires to move in
+        '''
         if __debug__:
             location = self.location.adjacent_location_in_direction(direction)
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.can_move(direction), "Invalid move cannot move in given direction"
+
+        if(self.team != self._state.my_team):
+            return
 
         self._state._queue({
             'action': 'move',
@@ -338,13 +498,20 @@ class Entity(object):
                 self.cooldown_end = self._state.turn + 1
 
     def queue_build(self, direction):
-        '''Queues a build, so that a statue of this team will be built in the
-        direction given in the next turn.'''
+        '''
+        Queues build to take place next turn. Throws an assertion error if cannot
+        build in given direction.
+        Args:
+            direction (Direction): Direction this entity desires to build in
+        '''
         location = self.location.adjacent_location_in_direction(direction)
 
         if __debug__:
             assert isinstance(location, Location), "Can't move to a non-location!"
             assert self.can_build(direction), "Invalid action cannot build in given direction"
+
+        if(self.team != self._state.my_team):
+            return
 
         self._state._queue({
             'action': 'build',
@@ -358,22 +525,11 @@ class Entity(object):
                 self.cooldown_end = self._state.turn + 10
                 self._state._build_statue(location)
 
-    def queue_move_location(self, location):
-        '''Queues a move, so that this object will move in the next turn.'''
-        if __debug__:
-            assert isinstance(location, Location), "Can't move to a non-location!"
-            assert self.location.distance_to_squared(location) <= 2
-
-        direction = self.location.direction_to(location)
-
-        self.queue_move(direction)
-
     def _deal_damage(self, damage):
-        if self.disintegrated:
+        if self._disintegrated:
             return
 
         self.hp -= damage
-        print(self.hp, self.id)
         if(self.hp>0):
             return
 
@@ -384,11 +540,18 @@ class Entity(object):
             self.holding.held_by = None
             self._state.map._occupied[self.location] = self.holding
 
-        self.disintegrated = True
+        self._disintegrated = True
         del self._state.entities[self.id]
 
     def queue_disintegrate(self):
-        '''Queues a disintegration, so that this object will disintegrate in the next turn.'''
+        '''
+        Queues a disintegration, so that this object will disintegrate in the
+        next turn.
+        '''
+
+        if(self.team != self._state.my_team):
+            return
+
         self._state._queue({
             'action': 'disintegrate',
             'id': self.id
@@ -399,11 +562,20 @@ class Entity(object):
 
 
     def queue_throw(self, direction):
-        '''Queues a move, so that this object will throw held object one square
-        in given direction in the next turn.'''
+        '''
+        Queue this entity to throw a bot in given direction next turn. If this
+        cannot throw, will throw an assertion.
+        Args:
+            direction (Direction): Direction this entity desires to throw its
+                                   held entity
+        '''
+
         if __debug__:
             assert self.holding != None, "Not Holding anything"
             assert self.can_throw(direction), "Not Enough space to throw"
+
+        if(self.team != self._state.my_team):
+            return
 
         self._state._queue({
             'action': 'throw',
@@ -434,7 +606,6 @@ class Entity(object):
                         target_loc.y + direction.dy)
 
             target = self._state.map._occupied.get(target_loc, None)
-            print(target)
             if(target != None):
                 target._deal_damage(THROW_ENTITY_DAMAGE)
                 held._deal_damage(THROW_ENTITY_RECOIL)
@@ -442,18 +613,25 @@ class Entity(object):
             landing_location = Location(target_loc.x - direction.dx, \
                                         target_loc.y - direction.dy)
             held.location = landing_location
-            print(self._state.map.tile_at(landing_location))
             if self._state.map.tile_at(landing_location)  == DIRT:
                 held._deal_damage(THROW_ENTITY_DIRT)
-            else:
-                print("Didn't land on dirt")
-            if not held.disintegrated:
+            if not held._disintegrated:
                 self._state.map._occupied[landing_location] = held
             held.held_by = None
 
             self.cooldown_end = self._state.turn + 10
 
     def queue_pickup(self, entity):
+        '''
+        Queues this to pickup entity next turn. If this cannot pickup entity
+        will throw an assertion error.
+        Args:
+            entity (Entity): The entity this entity desires to pickup
+        '''
+
+        if(self.team != self._state.my_team):
+            return
+
         if __debug__:
             assert self.can_pickup(entity), "Invalid Pickup Command"
 
@@ -471,17 +649,36 @@ class Entity(object):
                 entity.location = self.location
                 self.holding_end = self._state.turn + 10
                 self.cooldown_end = self._state.turn + 10
-
-    def entities_within_distance(self, distance, include_held=False,
+    def entities_within_adjacent_distance(self, distance, include_held=False,
             iterator=None):
-        '''Entities within a certain distance'''
+        '''
+        Returns all the entities within a certain adjacency distance from this
+        bot as an generator.
+        Adjacency distance is the number of adjacent blocks needed to traverse
+        to get to a tile, which is equivalent to max(abs(deltax), abs(deltay))
+        Args:
+            distance (float): returns all entities with distance less than <=
+                              distance
+
+        Options Args:
+            include_held (bool): Defaults to false. If true held units will be
+                                  included in the iterator
+            iterator (iterator or list): A subset of bots to iterate through.
+                                         Will only search the bots in this
+                                         iterator
+
+        Returns:
+            [Entities]: Returns a generator for the entities within distance of
+                        of this robot
+        '''
+
         if iterator != None:
             for entity in iterator:
                 if entity is self:
                     continue
                 if not include_held and entity.held_by is not None:
                     continue
-                if self.location.distance_to(entity.location) < distance:
+                if self.location.adjacent_distance_to(entity.location) <= distance:
                     yield entity
 
             return
@@ -491,15 +688,65 @@ class Entity(object):
                 continue
             if not include_held and entity.held_by is not None:
                 continue
-            if self.location.distance_to(entity.location) < distance:
+            if self.location.adjacent_distance_to(entity.location) <= distance:
                 yield entity
 
-    '''Entities within a certain distance squared.'''
-    def entities_within_distance_squared(self, distance):
-        return self.entities_within_distance(distance**2)
+    def entities_within_euclidean_distance(self, distance, include_held=False,
+            iterator=None):
+        '''
+        Returns all the entities within a certain Euclidean distance from this
+        bot as an generator.
+        Euclidean distance is defined as sqrt(deltax^2+deltay^2)
+        Not to be confused with displacement difference, which is
+        max(deltax,deltay)
+        Args:
+            distance (float): returns all entities with distance less than <=
+                              distance
+
+        Options Args:
+            include_held (bool): Defaults to false. If true held units will be
+                                  included in the iterator
+            iterator (iterator or list): A subset of bots to iterate through.
+                                         Will only search the bots in this
+                                         iterator
+
+        Returns:
+            [Entities]: Returns a generator for the entities within distance of
+                        of this robot
+        '''
+
+        if iterator != None:
+            for entity in iterator:
+                if entity is self:
+                    continue
+                if not include_held and entity.held_by is not None:
+                    continue
+                if self.location.distance_to(entity.location) <= distance:
+                    yield entity
+
+            return
+
+        for entity in self._state.get_entities():
+            if entity is self:
+                continue
+            if not include_held and entity.held_by is not None:
+                continue
+            if self.location.distance_to(entity.location) <= distance:
+                yield entity
+
+Entity.THROWER = 'thrower'
+Entity.HEDGE = 'hedge'
+Entity.STATUE = 'statue'
+
 
 class Location(tuple):
-    '''An x,y location in the world.'''
+    '''
+    An x,y tuple representing a location in the world.
+    This class is immutable.
+    Attributes:
+        x (int): x coordinate of location
+        y (int): y coordinate of location
+    '''
 
     __slots__ = []
 
@@ -534,12 +781,47 @@ class Location(tuple):
     __hash__ = tuple.__hash__
 
     def distance_to_squared(self, location):
+        '''
+        Return squared distance from self to other location.
+        Args:
+            location (Location): location we are trying to find the distance to
+        Returns:
+            int: Distance squared to the location
+        '''
         return (location.x-self.x)**2+(location.y-self.y)**2
 
     def distance_to(self, location):
+        '''
+        Return Euclidean distance from self to other location.
+        This is sqrt(deltax^2+deltay^2)
+        Args:
+            location (Location): location we are trying to find the distance to
+        Returns:
+            float: Distance squared to the location
+        '''
         return math.sqrt((location.x-self.x)**2+(location.y-self.y)**2)
 
+    def adjacent_distance_to(self, location):
+        '''
+        Return adjacent distance from self to other location.
+        This is defined as max(abs(deltax),abs(deltay)), and is the number of
+        adjacent moves needed to get to a location.
+        Args:
+            location (Location): location we are trying to find the distance to
+        Returns:
+            float: Distance squared to the location
+        '''
+        return max(abs(self.x-location.x), abs(self.x-location.y))
+
     def direction_to(self, location):
+        '''
+        Return a Direction from self to location. It will round to the most
+        closest cardinal direction.
+        Args:
+            location (Location): location we are trying to find the direction to
+        Returns:
+            Direction: The direction to the location
+        '''
         if __debug__:
             assert location != self, "Can not find direction to same location"
 
@@ -549,18 +831,42 @@ class Location(tuple):
         return Direction.from_delta(dx, dy)
 
     def adjacent_location_in_direction(self, direction):
+        '''
+        Returns the location the is adjacent to a this in a certain direction.
+        Args:
+            direction (Direction): Direction that adjacency is desired
+        Returns:
+            Location: Location of the adjacent tile. Note this is not
+                      necessarily on the map.
+        '''
+
         return Location(self.x+direction.dx, self.y+direction.dy)
 
-    def location_in_direction(self, direction, distance):
-        if __debug__:
-            assert (distance > 0), "Distance has to be greater than 0"
-
-        dx = direction.dx*distance
-        dy = direction.dy*distance
-        return Location(self.x+dx, self.y+dy)
+    def is_adjacent(self, location):
+        '''
+        Return True if a tile is adjacent to given location.
+        Args:
+            location (Location): location we are trying to find if adjacent
+        Returns:
+            bool: True if adjacent else false
+        '''
+        return self.distance_to_squared(location)<=2
 
 class Sector(object):
+    '''
+    Representation of a sector on the map
+    Attributes:
+        top_left (Location): Location of top_left corner of sector. This is the
+                             max y and min x of the square.
+        team (Team): the team controlling this sector. If neither player team controls
+                     this sector then the neutral team will control it
+    '''
+
     def __init__(self, state, top_left):
+        '''
+        Do not touch this function. It initializes sectors before the game
+        starts
+        '''
         self._state = state
         self.top_left = top_left
         self.team = None
@@ -570,6 +876,7 @@ class Sector(object):
             assert self.top_left.x == data['topLeft']['x']
             assert self.top_left.y == data['topLeft']['y']
 
+        assert data['controllingTeamID']!=-1, "We Done goof"
         self.team = self._state.teams[data['controllingTeamID']]
 
     def __eq__(self, other):
@@ -580,8 +887,29 @@ class Sector(object):
     def __ne__(self, other):
         return not (self == other)
 
+    def entities_in_sector(self):
+        '''
+        returns an iterator for entities in this sector
+        Returns:
+            Entities: entities in this sector
+        '''
+        for entity in self._state.get_entities():
+            entity_sector = self._state.map.sector_at(entity.location)
+            if(entity_sector != self):
+               continue
+            yield entity
+
+
 class Map(object):
-    '''A game map.'''
+    '''
+    A representation of the Game Map.
+    Attributes:
+        height (int): The max height, y.
+        width (int): The max width, x.
+        tiles ([string]): An array for the type of tile at each location.
+        sector_size (int): The size of each sector
+    '''
+
     def __init__(self, state, height, width, tiles, sector_size):
         self._state = state
         self.height = height
@@ -589,6 +917,8 @@ class Map(object):
         self.tiles = tiles
         self.sector_size = sector_size
         self._sectors = {}
+
+        # occupied maps Location to Entity
         self._occupied = {}
         for x in range(0, self.width, self.sector_size):
             for y in range(0, self.height, self.sector_size):
@@ -596,10 +926,27 @@ class Map(object):
                 self._sectors[top_left] = Sector(self._state, top_left)
 
     def tile_at(self, location):
-        '''Get the tile at a location.'''
+        '''
+        Returns the string for the tile at a given Location
+        This throws an assertion error if the location is out of bounds of the
+        map.
+        Args:
+            location (Location): the location we want to find out about
+        Returns:
+            String: The string describing the tile type. Either 'G' or 'D'
+        '''
+        assert self.location_on_map(location), "No Tile location not on map"
         return self.tiles[len(self.tiles)-location.y-1][location.x]
 
     def location_on_map(self, location):
+        '''
+        Checks whether a given location exists on this map.
+        Args:
+            location (Location): the location we want to find out about
+        Returns:
+            bool: True if this location exists on the map. else false
+        '''
+
         if __debug__:
             assert isinstance(location, Location), "Must pass a location"
         x = location.x
@@ -607,6 +954,14 @@ class Map(object):
         return ((y>=0 and y < self.height) and (x>=0 and x < self.width))
 
     def sector_at(self, location):
+        '''
+        Determine the sector for a given location
+        Args:
+            location (Location): the location we want to find out about
+        Returns:
+            Sector: The sector containing this location
+        '''
+
         if __debug__:
             assert self.location_on_map(location)
         loc = Location(
@@ -624,7 +979,13 @@ class Map(object):
             self._sectors[top_left]._update(sector_data)
 
 class Team(object):
-    '''Information about a team.'''
+    '''
+    Information about the teams
+    This is immutable, please don't touch this. Or your bot will break.
+    Attributes:
+        id (int): The id, index, of the team
+        name (string): the string name of the team
+    '''
 
     def __init__(self, id, name):
         self.id = id
@@ -640,9 +1001,23 @@ class Team(object):
         return str(self)
 
 class State(object):
+    '''
+    This is the state of the game at this turn
+    It contains all of the important, and generated by the game.
+    Do not modify any thing in this directly
+    Attributes:
+        map (Map): This is the map
+        turn (int): The turn number in this state
+        teams ([Teams]): An array of teams indexed by id
+        my_team (Team): My team
+        my_team_id (int): The id of my team
+        speculate (bool): Pretends that the engine is running locally so it
+                          makes sure the code is good. Don't teach.
+    '''
+
     def __init__(self, game, teams, my_team_id, initialState):
         self._game = game
-        self.max_id = 0
+        self._max_id = 0
 
         self.map = Map(
             self,
@@ -657,9 +1032,13 @@ class State(object):
         self.entities = {}
         self.teams = teams
         self.my_team = teams[my_team_id]
+        if(len(teams) ==3):
+            # This is jank code to convert a 1 to a 2 and a 2 to a 1 to get the
+            # opposiing team
+            self.other_team = teams[((my_team_id+1)**2+1)%3] 
+        else:
+            self.other_team = teams[0]
         self.my_team_id = my_team_id
-
-        self.entities_by_location = {}
 
         self._action_queue = []
 
@@ -669,11 +1048,8 @@ class State(object):
         self.speculate = True
 
     @property
-    def get_turn(self):
-        return self.turn
-
-    @property
     def turn_next_spawn(self):
+        ''' Turn when next spawn occurs'''
         return ((self.turn-1)//10+1)*10
 
 
@@ -683,27 +1059,27 @@ class State(object):
     def _update_entities(self, data):
         for entity in data:
             id = entity['id']
-            self.max_id = max(self.max_id, id)
+            self._max_id = max(self._max_id, id)
             if id not in self.entities:
                 self.entities[id] = Entity(self)
             self.entities[id]._update(entity)
 
     def _build_statue(self, location):
         ''' Build a statue in this state at locatiion location '''
-        self.max_id+=1
+        self._max_id+=1
 
         data ={
-            'id': self.max_id,
+            'id': self._max_id,
             'teamID': self.my_team_id,
-            'type': "statue",
+            'type': Entity.STATUE,
             'location': {
                 'x': location.x,
                 'y': location.y
             },
-            'hp': 10
+            'hp': 1
         }
-        self.entities[self.max_id] = Entity(self)
-        self.entities[self.max_id]._update(data)
+        self.entities[self._max_id] = Entity(self)
+        self.entities[self._max_id]._update(data)
 
     def _kill_entities(self, entities):
         for dead in entities:
@@ -716,9 +1092,7 @@ class State(object):
     def _validate(self):
         for ent in self.entities.values():
             if not ent.is_held:
-                assert self.map._occupied[ent.location] == ent.id
-        for loc, id in self.map._occupied.items():
-            assert self.entities[id].location == loc
+                assert self.map._occupied[ent.location] == ent
 
     def _validate_keyframe(self, keyframe):
         altstate = State(self._game, self.teams, self.my_team.id, keyframe['state'])
@@ -736,7 +1110,14 @@ class State(object):
 
     def get_entities(self, entity_id=-1,entity_type=None,location=None,
             team=None):
-        for i in range(self.max_id+1):
+
+        ''' Get an iterator of all the entities.
+            Can filter with the parameters:
+                entity_id gets the entity with a given id
+                entity_type filters to only entities of a given type
+                team filters all entities are part of a given team'''
+
+        for i in range(self._max_id+1):
             entity = self.entities.get(i)
             if entity == None:
                 continue
@@ -757,7 +1138,13 @@ else:
     DEFAULT_SERVER = (os.environ['BATTLECODE_IP'], 6147)
 
 class Game(object):
-    '''A game that's currently running.'''
+    '''
+    This is the game that is being played.
+    Running the init connects your code to the engine to play the game
+    Create a for loop which iterates through game.turns to play the game. It
+    will give a state for each turn with which you can see and perform
+    actions.
+    '''
 
     def __init__(self, name, server=DEFAULT_SERVER):
         '''Connect to the server and wait for the first turn.
@@ -788,13 +1175,15 @@ class Game(object):
             'name': name,
         }
         if 'BATTLECODE_PLAYER_KEY' in os.environ:
-            key = os.environ['BATTLECODE_PLAYER_KEY'] 
+            key = os.environ['BATTLECODE_PLAYER_KEY']
             print('Logging in with key:', key)
             login['key'] = key
 
         self._send(login)
 
         self._recv_queue = Queue()
+
+        self._missed_turns = set()
 
         commThread = threading.Thread(target=self._recv_thread, name='Battlecode Communication Thread')
         commThread.daemon = True
@@ -823,13 +1212,10 @@ class Game(object):
 
         self.winner = None
 
-        self._missed_turns = set()
-
         # wait for our first turn
-        # TODO: run messaging logic on another thread?
         self._next_team = None
         self._await_turn()
-    
+
     def _send(self, message):
         '''Send a dictionary as JSON to the server.
         See server/src/schema.ts for valid messages.'''
@@ -854,11 +1240,13 @@ class Game(object):
             result = json.loads(message)
 
             if "command" not in result:
+                self._recv_queue.put(None)
                 raise BattlecodeError("Unknown result: "+str(result))
-                sys.exit(1)
             elif result['command'] == 'error':
-                raise BattlecodeError(result['reason'])
-                sys.exit(1)
+                if result['reason'].startswith('wrong turn'):
+                    sys.stderr.write('Battlecode warning: missed turn, speed up your code!\n')
+                else:
+                    raise BattlecodeError(result['reason'])
             elif result['command'] == 'missedTurn':
                 sys.stderr.write('Battlecode warning: missed turn {}, speed up your code!\n'.format(result['turn']))
                 self._missed_turns.add(result['turn'])
@@ -902,7 +1290,6 @@ class Game(object):
                 continue
 
             assert turn['command'] == 'nextTurn'
-            print(turn)
 
             self.state._update_entities(turn['changed'])
             self.state._kill_entities(turn['dead'])
@@ -918,12 +1305,11 @@ class Game(object):
                 if turn['lastTeamID'] == self.state.my_team.id:
                     # handle what happened last turn
                     for action, reason in zip(turn['failed'], turn['reasons']):
-                        print('{}failed: {}:{} reason: {}{}'.format(
-                            _TERM_RED,
+                        print('failed: {}:{} reason: {}'.format(
                             action['id'],
                             action['action'],
+                            self.state.turn,
                             reason,
-                            _TERM_END
                         ))
 
             if turn['nextTeamID'] == self.state.my_team.id and not self._can_recv_more():
@@ -946,6 +1332,13 @@ class Game(object):
         self.state._action_queue.append(action)
 
     def turns(self, copy=True, speculate=True):
+        '''
+        Returns an iterator. You should for loop over this function to get a
+        copy of state for each turn.
+        Returns:
+            State: a state that you can play on
+        '''
+
         if speculate:
             copy = True
         while True:
@@ -960,7 +1353,6 @@ class Game(object):
                     speculative._game = self
                     self.state._game = self
                     yield speculative
-                    print(self.state._action_queue)
                 else:
                     yield self.state
 

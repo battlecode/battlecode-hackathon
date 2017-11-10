@@ -151,7 +151,8 @@ export class TimelineCollection {
                 command: "start",
                 gameID: matchData.gameID,
                 initialState: matchData.initialState,
-                teams: matchData.teams
+                teams: matchData.teams,
+                timeoutMS: 100,
             });
             for (let turn of matchData.turns) {
                 this.apply(turn);

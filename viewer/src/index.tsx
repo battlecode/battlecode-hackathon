@@ -55,7 +55,8 @@ const testMap: schema.GameStart = {
         { teamID: 0, name: 'neutral' },
         { teamID: 1, name: 'A' },
         { teamID: 2, name: 'B' }
-    ]
+    ],
+    timeoutMS: 100,
 };
 
 let ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
@@ -113,6 +114,7 @@ const createGame = (map: string) => {
         command: "createGame",
         map: map,
         sendReplay: true,
+        timeoutMS: 100,
     };
     ws.send(JSON.stringify(create));
 }

@@ -1,34 +1,31 @@
 {
     "version": "battlecode 2017 hackathon map",
     "teamCount": 2,
-    "height": 12,
-    "width": 12,
+    "height": 10,
+    "width": 10,
     "tiles": [
-        ["D","D","D","G","D","D","D","D","D","D","G","D"],
-        ["D","D","D","G","D","D","D","D","D","D","G","D"],
-        ["D","D","G","D","D","D","D","D","D","D","G","D"],
-        ["G","G","D","D","D","D","D","D","D","D","G","D"],
-        ["D","D","D","D","D","D","D","D","D","D","D","D"],
-        ["D","D","D","D","D","G","G","D","D","D","D","D"],
-        ["D","D","D","D","D","G","G","D","D","D","D","D"],
-        ["D","D","D","D","D","D","D","D","D","D","D","D"],
-        ["D","G","D","D","D","D","D","D","D","D","G","G"],
-        ["D","G","D","D","D","D","D","D","D","G","D","D"],
-        ["D","G","D","D","D","D","D","D","G","D","D","D"],
-        ["D","G","D","D","D","D","D","D","G","D","D","D"]
+        ["D","D","D","G","D","D","D","D","G","D"],
+        ["D","D","D","G","D","D","D","D","G","D"],
+        ["G","G","G","D","D","D","D","D","G","D"],
+        ["D","D","D","D","G","G","D","D","D","D"],
+        ["D","D","D","D","G","G","D","D","D","D"],
+        ["D","D","D","D","G","G","D","D","D","D"],
+        ["D","D","D","D","G","G","D","D","D","D"],
+        ["D","G","D","D","D","D","D","G","G","G"],
+        ["D","G","D","D","D","D","G","D","D","D"],
+        ["D","G","D","D","D","D","G","D","D","D"]
     ],
-    "sectorSize": 2,
+    "sectorSize": 5,
     "entities": [
-        {"id": 0, "type": "statue",  "location": {"x":1, "y":0},  "teamID": 1, "hp": 10},
-        {"id": 1, "type": "statue",  "location": {"x":10,"y":11}, "teamID": 2, "hp": 10},
-        {"id": 2, "type": "hedge",   "location": {"x":1, "y":2},  "teamID": 0, "hp": 100},
-        {"id": 3, "type": "hedge",   "location": {"x":2, "y":2},  "teamID": 0, "hp": 100},
-        {"id": 4, "type": "hedge",   "location": {"x":3, "y":2},  "teamID": 0, "hp": 100},
-        {"id": 5, "type": "hedge",   "location": {"x":10,"y":9},  "teamID": 0, "hp": 100},
-        {"id": 6, "type": "hedge",   "location": {"x":9, "y":9},  "teamID": 0, "hp": 100},
-        {"id": 7, "type": "hedge",   "location": {"x":8, "y":9},  "teamID": 0, "hp": 100},
+        {"id": 0, "type": "statue",  "location": {"x":1, "y":0},  "teamID": 1, "hp": 1},
+        {"id": 1, "type": "statue",  "location": {"x":8, "y":9}, "teamID": 2, "hp": 1},
+        {"id": 2, "type": "hedge",   "location": {"x":1, "y":2},  "teamID": 0, "hp": 10},
+        {"id": 3, "type": "hedge",   "location": {"x":2, "y":2},  "teamID": 0, "hp": 10},
+        {"id": 4, "type": "hedge",   "location": {"x":3, "y":2},  "teamID": 0, "hp": 10},
+        {"id": 5, "type": "hedge",   "location": {"x":8, "y":7},  "teamID": 0, "hp": 10},
+        {"id": 6, "type": "hedge",   "location": {"x":7, "y":7},  "teamID": 0, "hp": 10},
+        {"id": 7, "type": "hedge",   "location": {"x":6, "y":7},  "teamID": 0, "hp": 10},
         {"id": 8, "type": "thrower", "location": {"x":3, "y":3},  "teamID": 1, "hp": 10},
-        {"id": 9, "type": "thrower", "location": {"x":8, "y":8},  "teamID": 2, "hp": 10}
+        {"id": 9, "type": "thrower", "location": {"x":6, "y":6},  "teamID": 2, "hp": 10}
     ]
 }
-

@@ -73,7 +73,7 @@ let maps: string[] = [];
 let replays: string[] = [];
 
 let lastUpdateTime: number = performance.now();
-let updateInterval: number = 100;
+let turnsPerSecond: number = 10;
 let isPlaying: boolean = false;
 
 ws.onclose = (event) => {
@@ -143,6 +143,7 @@ const togglePlaying = () => {
 }
 
 const updateCurrentFrame = (time: number) => {
+    const updateInterval = 1000 / turnsPerSecond;
     const thisInterval = time - lastUpdateTime;
     const numTurns = (thisInterval / updateInterval);
     
@@ -167,6 +168,12 @@ const updateCurrentFrame = (time: number) => {
     }
 }
 
+const togglePlaybackRate = () => {
+    const playbackRates = [1, 5, 10, 50, 1];
+    turnsPerSecond = playbackRates[playbackRates.indexOf(turnsPerSecond) + 1];
+    render();
+}
+
 // disable right-click menus
 document.addEventListener('contextmenu', event => event.preventDefault());
 
@@ -184,8 +191,10 @@ const renderer = () => {
                     farthestRound={timelines.timelines[gameID].farthest.turn}
                     maxRound={1000}
                     changeRound={timelineChangeRound}
+                    turnsPerSecond={turnsPerSecond}
                     isPlaying={isPlaying}
                     togglePlaying={togglePlaying}
+                    togglePlaybackRate={togglePlaybackRate}
                 />
                 <div style={`position: relative;`}>
                     <RendererComponent gameState={timelines.timelines[gameID].current}

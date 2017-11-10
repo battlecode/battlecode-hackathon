@@ -17,8 +17,10 @@ interface Props extends Inferno.Props {
     farthestRound: number;
     maxRound: number;
     changeRound: (number) => void;
+    turnsPerSecond: number;
     isPlaying: boolean;
     togglePlaying: () => void;
+    togglePlaybackRate: () => void;
 }
 
 interface State {
@@ -74,13 +76,17 @@ export class TopBar extends Component<{}, State> {
                     active={this.state.active[2]}
                     idx={2}
                     color="red"
-                    label="Viewer settings"
+                    label="Viewer controls"
                     xOffset={325}
                     deselectAllExceptToggle={this.deselectAllExceptToggle}
                 >
                     <ViewerSettingsMenu 
+                        currentRound={this.props.currentRound}
+                        maxRound={this.props.maxRound}
+                        turnsPerSecond={this.props.turnsPerSecond}
                         isPlaying={this.props.isPlaying}
                         togglePlaying={this.props.togglePlaying}
+                        togglePlaybackRate={this.props.togglePlaybackRate}
                     />
                 </DialogButton>
                 <Timeline

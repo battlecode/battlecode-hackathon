@@ -126,7 +126,7 @@ def endGame(game):
 			replays.append(match.replay_data)
 	if len(winners) < len(game.matches):
 		return
-	
+
 	keys = []
 	for replay in replays:
 		if replay is None:
@@ -143,7 +143,7 @@ def endGame(game):
 		if winner==2:
 			teamB += 1
 		winners[i] = game.teams[i].db_id
-	
+
 	winner = 0 if teamA==teamB else 1 if teamA>teamB else 2
 	if winner == 0:
 		print(prefix+"Game between " + game.teams[0].name + " and " + game.teams[1].name + " failed, nobody connected to the engine.")
@@ -152,10 +152,10 @@ def endGame(game):
 
 	redElo = getTeamRating(game['teams'][0]['botID'])
 	blueElo = getTeamRating(game['teams'][1]['botID'])
-	
+
 	r_1 = 10**(redElo/400)
 	r_2 = 10**(blueElo/400)
-	
+
 	e_1 = r_1/(r_1+r_2)
 	e_2 = r_2/(r_1+r_2)
 
@@ -182,7 +182,7 @@ def listen(games, socket):
 							match.replay_data = message['matchData']
 							match.winner = int(message['winner'])
 							print(prefix+"Match between " + game.teams[0].name + " and " + game.teams[1].name + "ended (" + ("red" if match.winner==1 else "blue" if match.winner==2 else "nobody") + " won).")
-								
+
 							endGame(game)
 		time.sleep(0.005)
 
@@ -204,7 +204,7 @@ def getTeamRating(id):
 	elo = ELO_START
 	if len(elos) > 0:
 		elo = elos[0][0]
-	
+
 	return elo
 
 
@@ -238,7 +238,7 @@ while True:
 		continue
 
 	queuedGame = queuedGames[0]
-	
+
 	print(prefix+"Queuing game between " + game.teams[0].name + " and " + game.teams[1].name + ".")
 
 	c.execute("UPDATE scrimmage_matches SET status='running' WHERE id=%s",(queuedGame[0]))
@@ -246,17 +246,22 @@ while True:
 	bucket.download_file(queuedGame[3], 'botA.zip')
 	bucket.download_file(queuedGame[4], 'botB.zip')
 
+    maps = []
+    for mapID in queuedGame[7]:
+        c.execute("SELECT name from scrimmage_maps WHERE id=%s",(mapID))
+        maps.append(c.fetchone)
+
 	matches = []
 	teams = [{"name":queuedGame[5],"key":None,"db_id":queuedGame[1]},{"name":queuedGame[6],"key":None,"db_id":queuedGame[2]}]
-	for index, map in enumerate(queuedGame[7]):
+	for index, map in enumerate(maps):
 		redKey, blueKey = random_key(20), random_key(20)
 		bots = [{"botID": queuedGame[1], "key":redKey, "path": "botA.zip"},{"botID": queuedGame[2], "key":blueKey, "path": "botB.zip"}]
 
 		teams[0].key = redKey
 		teams[1].key = blueKey
-	
+
 		ng_id = startGame(teams,map)
-		print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + ".")
+		print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + " on " + map + ".")
 		matches.append({"ng_id":ng_id,"sandboxes":runGame(bots),"connected":[False,False],"replay_data":None,"winner":None})
 
 	running_games.append({'db_id':queuedGame[0],'start':datetime.datetime.now(),'teams':teams,'matches':matches})

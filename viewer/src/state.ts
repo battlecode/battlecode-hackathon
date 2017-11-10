@@ -112,9 +112,7 @@ export class Timeline {
         while (newCurrent.turn < turn) {
             // async, don't block the ui thread
             if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
-
             const delta = this.deltas[newCurrent.turn + 1];
-
             newCurrent.apply(delta);
             for (let cb of this.changeCbs) {
                 cb(newCurrent, delta);
@@ -129,7 +127,7 @@ export class Timeline {
     }
 
     async loadNextNTurns(numTurns: number, callback?: () => void) {
-        if (numTurns < 0) throw new Error("out of range: "+numTurns);
+        if (numTurns <= 0) throw new Error("out of range: "+numTurns);
 
         let lock = await this.loadLock.acquire();
         let newCurrent = cloneDeep(this.current);
@@ -137,15 +135,13 @@ export class Timeline {
         while (newCurrent.turn < targetTurn) {
             // async, don't block the ui thread
             if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
-
             const delta = this.deltas[newCurrent.turn + 1];
-
             newCurrent.apply(delta);
             for (let cb of this.changeCbs) {
                 cb(newCurrent, delta);
             }
         }
-
+        
         this.current = newCurrent;
         lock.release();
         if (callback) {
@@ -217,12 +213,10 @@ export class TimelineCollection {
                 callback(gameInfo);
             }
         } else if (command.command == 'replayResponse') {
-            console.log(command.match);
             let buf = base64.toByteArray(command.match);
             let data: Uint8Array = inflate(buf);
             let json = utf8.decodeUTF8(data);
             let matchData = <schema.MatchData>JSON.parse(json);
-            console.log(matchData);
             let {gameID} = matchData;
 
             this.apply({
@@ -245,7 +239,7 @@ export class TimelineCollection {
             if (callback) {
                 const gameInfo: ActiveGameInfo = {
                     gameID: gameID,
-                    status: 'running',
+                    status: 'finished',
                     mapName: matchData.initialState.mapName!,
                     playerOne: matchData.teams[0].name,
                     playerTwo: matchData.teams[1].name,

@@ -407,8 +407,9 @@ export class GameRunner {
             version: "battlecode 2017 hackathon match",
             initialState: this.game.initialState,
             gameID: this.id,
-            teams: this.game.teams,
-            turns: this.pastTurns,
+            // skip neutral
+            teams: this.game.teams.slice(1),
+            turns: this.pastTurns.sort((a, b) => a.turn - b.turn),
             winner: this.winner ? this.winner.teamID : undefined
         };
 
@@ -580,7 +581,9 @@ export default class Server {
 
         // map name may include slashes
         let sanitizedMapName = <string>game.game.initialState.mapName;
-        sanitizedMapName = sanitizedMapName.replace('/', '-').slice(0, sanitizedMapName.length - '.json'.length);
+        sanitizedMapName = sanitizedMapName.replace('/', '-')
+            .replace('\\', '-')
+            .slice(0, sanitizedMapName.length - '.json'.length);
 
         let filename = `${teamnames}-${sanitizedMapName}-${game.id}.bch18`;
 

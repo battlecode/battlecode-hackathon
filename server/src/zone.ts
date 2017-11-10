@@ -1,16 +1,17 @@
 import { SectorData, EntityID, EntityData, TeamID, Location } from './schema';
+import * as _ from 'lodash';
 
 export class Sector {
     teams: Map<TeamID, EntityID[]>;
-    topLeft: Location;
-    controllingTeam: TeamID;
+    topLeft_: Location;
+    controllingTeam_: TeamID;
     hasChanged: boolean;
 
     constructor(topLeft: Location) {
        this.teams = new Map();
-       this.topLeft = topLeft;
+       this.topLeft_ = topLeft;
        // by default, 'neutral' controls this sector
-       this.controllingTeam = 0;
+       this.controllingTeam_ = 0;
        this.hasChanged = false;
     }
 
@@ -73,8 +74,8 @@ export class Sector {
     
     updateControllingTeam() {
         var newControllingTeam = this.getControllingTeamID()
-        if (this.controllingTeam != newControllingTeam) {
-            this.controllingTeam = newControllingTeam;
+        if (this.controllingTeam_ != newControllingTeam) {
+            this.controllingTeam_ = newControllingTeam;
             this.hasChanged = true;
         }
     }
@@ -112,14 +113,14 @@ export class Sector {
     * returns id of spawning statue from controlling team, if one exists
     */
     getSpawningStatueID(): EntityID | undefined {
-        return this.getOldestStatueID(this.controllingTeam);
+        return this.getOldestStatueID(this.controllingTeam_);
     }
 
     static getSectorData(sector: Sector): SectorData {
         var data: SectorData = {
-            topLeft: sector.topLeft,
-            controllingTeamID: sector.controllingTeam
+            topLeft: sector.topLeft_,
+            controllingTeamID: sector.controllingTeam_
         }
-        return data
+        return _.cloneDeep(data)
     }
 }

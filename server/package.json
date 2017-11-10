@@ -1,7 +1,7 @@
 {
-  "name": "@battlecode/battlehack17",
-  "version": "1.0.0",
-  "description": "",
+  "name": "@battlecode/battlehack",
+  "version": "17.0.3",
+  "description": "BATTLEHACK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -10,7 +10,10 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && node dist/src/cli/cli.js",
-    "test": "tsc && ava dist/test"
+    "test": "tsc && ava dist/test",
+    "build-viewer": "npm run build --prefix ../viewer",
+    "copy-viewer": "mkdir -p ./dist/viewer && cp -R ../viewer/dist ./dist/viewer/dist && cp ../viewer/index.html ./dist/viewer && rm ./dist/viewer/dist/report.html",
+    "prepublish": "rm -rf ./dist && npm run build && npm run build-viewer && npm run copy-viewer"
   },
   "repository": {
     "type": "git",

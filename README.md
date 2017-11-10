@@ -1,66 +1,9 @@
-# TODO (Sep 30 - Oct 1)
-- Data format spec
-    - JSON
-    - Client -> Server
-        - User login
-        - Player actions
-    - Server -> Client
-        - Game start
-            - Game ID
-            - Players
-            - Map (size, dirt)
-        - Turn
-            - Game ID
-            - Round #
-            - Successful actions
-            - All units created / with changed state (incl. hedge, statues)
-            - All regions with changed owners
+# THE ENGINE
 
-- Server [?]
-    - Has to be easy to run on player machine; Python?
-    - Game logic
-        - Round robin
-        - Arbitrary number of teams :))
-    - Host viewer
 
-- Python client
-    - Start game
-    - Query game state
-    - Send actions
-    - Start server automatically?
 
-- Javascript viewer
-    - As simple as possible
-    - Flat and pretty?
 
-# TODO (after)
-- User authentication
-- Server 
-    - Order-independent turn solver (c.f. Diplomacy)? Send state after every player?
-    - Multiple games at once
-- Backend
-    - Data upload
-    - Sandboxing
-    - Scrimmages
-    - Tournament
-- Client
-    - Data upload
-        - battlecode.json
-            - Team name
-            - Language
-            - Version
-            - Player profile picture?
-        - Zip & POST?
-    - Authentication
-    - Languages:
-        - Java
-        - Javascript?
-        - Rust?
-        - C#?
-    - Helpers
-        - Pathfinding
-    - Language packages
-- Website
-    - Scrimmage viewer
-    - Tournament viewer
-    - Rankings
+
+
+
+finglewingle

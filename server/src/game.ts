@@ -5,7 +5,6 @@ import { Action, EntityData, SectorData, EntityID, NextTurn, MakeTurn,
 import { Sector } from './zone';
 import LocationMap from './locationmap';
 import ClientError from './error';
-import deepcopy from 'deepcopy';
 import * as _ from 'lodash';
 
 function distance(a: Location, b: Location): number {
@@ -305,11 +304,11 @@ export class Game {
     makeKeyframe(): Keyframe {
         let result: Keyframe = {
             command: "keyframe",
-            state: _.clone(this.initialState),
+            state: _.cloneDeep(this.initialState),
             teams: this.teams
         };
         result.state.sectors = Array.from(this.sectors.values()).map(Sector.getSectorData);
-        result.state.entities = Array.from(this.entities.values()).map(e => e.data);
+        result.state.entities = Array.from(this.entities.values()).map(e => e.getData());
         result.state.teamCount = this.teams.length - 1;
         return result;
     }
@@ -402,12 +401,12 @@ export class Game {
         for (var id of this.spawned) {
             let ent = this.getEntity(id);
             if (typeof ent === 'string') return ent;
-            results.push(ent.data);
+            results.push(ent.getData());
         }
         this.spawned = [];
         for (var entity of this.entities.values()) {
             if (entity.checkChanged()) {
-                results.push(entity.data);
+                results.push(entity.getData());
             }
         }
         return results;
@@ -629,11 +628,6 @@ export class Game {
             return "wrong team: "+entity.teamID;
         }
 
-        if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.turn) {
-            return "entity still on cool down: " + entity.id + "; "+
-                "ends "+entity.cooldownEnd+", current turn: "+this.turn;
-        }
-
         if (entity.type === "statue") {
             return "Statues can't do anything.";
         }
@@ -642,14 +636,23 @@ export class Game {
             return "Entity is held, cannot do anything";
         }
 
+        
         let err;
+        if (action.action === "disintegrate") {
+            err = this.doDisintegrate(entity, action);
+        }
+
+        if (entity.cooldownEnd !== undefined && entity.cooldownEnd > this.turn) {
+            return "entity still on cool down: " + entity.id + "; "+
+                "ends "+entity.cooldownEnd+", current turn: "+this.turn;
+        }
+
+
 
         if (action.action === "pickup") {
             err = this.doPickup(entity, action);
         } else if (action.action === "throw") {
             err = this.doThrow(entity, action);
-        } else if (action.action === "disintegrate") {
-            err = this.doDisintegrate(entity, action);
         } else if (action.action === "move" || action.action === "build") {
 
             if (action.dx === undefined || isNaN(action.dx) || action.dx < -1 || action.dx > 1 ||
@@ -753,14 +756,14 @@ export class Game {
         for (let [tl, sector] of this.sectors.entries()) {
             assert(this.sectors.get(tl.x, tl.y) === sector, `broken locationmap`);
             assert(this.getSector(tl) === sector, `broken sector lookup: ${tl.x},${tl.y}`);
-            assert(sector.topLeft.x === tl.x, `moved sector x`);
-            assert(sector.topLeft.y === tl.y, `moved sector y`);
+            assert(sector.topLeft_.x === tl.x, `moved sector x`);
+            assert(sector.topLeft_.y === tl.y, `moved sector y`);
             for (let [teamID, entities] of sector.teams.entries()) {
                 for (let id of entities) {
                     let entity = unwrap(this.getEntity(id));
                     assert(entity.type === 'statue', `non-statue stored in sector: ${entity.id}`);
-                    assert(unwrap(this.getSector(entity.location)).topLeft.x === tl.x, `entity in wrong sector`);
-                    assert(unwrap(this.getSector(entity.location)).topLeft.y === tl.y, `entity in wrong sector`);
+                    assert(unwrap(this.getSector(entity.location)).topLeft_.x === tl.x, `entity in wrong sector`);
+                    assert(unwrap(this.getSector(entity.location)).topLeft_.y === tl.y, `entity in wrong sector`);
                 }
             }
         }
@@ -789,7 +792,7 @@ const validateTeams = (teams: TeamData[]) => {
  * Acts like an EntityData, but when you set a property the "dirty" flag is set to true.
  */
 export class Entity {
-    data: EntityData;
+    private data: EntityData;
     private _location: Location;
     dirty: boolean;
 
@@ -822,6 +825,10 @@ export class Entity {
         let result = this.dirty;
         this.dirty = false;
         return result;
+    }
+
+    getData(): EntityData {
+        return _.cloneDeep(this.data);
     }
 
     get id(): EntityID      { return this.data.id; }

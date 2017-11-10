@@ -16,7 +16,13 @@ export class NewGameMenu extends Component<Props, State> {
 
     constructor(props: Props) {
         super(props);
-        this.state = {};
+        if (props.maps.length > 0) {
+            this.state = {
+                map: props.maps[0],
+            };
+        } else {
+            this.state = {};
+        }
     }
 
     onChange = (e: any) => {

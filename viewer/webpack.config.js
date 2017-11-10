@@ -2,7 +2,8 @@ const path = require('path');
 
 module.exports = {
   entry: {
-    index: './src/index.tsx'
+      poly: 'babel-polyfill',
+      index: './src/index.tsx',
   },
 
   output: {

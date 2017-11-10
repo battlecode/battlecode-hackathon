@@ -39,6 +39,7 @@ export interface RendererState {
     mouseRotateStartX?: number;
     mouseRotateStartY?: number;
     mouseRotateStartAngle?: number;
+    entData?: schema.EntityData | null;
 }
 export class RendererComponent extends Component<RendererProps, RendererState> {
     domNode: HTMLDivElement;
@@ -67,7 +68,30 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
                 }
             }}
             onmousemove={(e) => {
-                this.state.renderer.setMouse(e.clientX, e.clientY);
+                let ent = this.state.renderer.setMouse(e.clientX, e.clientY);
+                if (ent) {// && (!this.state.entData || this.state.entData.id !== ent.id)) {
+                    this.setState(
+                        {
+                            renderer: this.state.renderer,
+                            mouseRotating: this.state.mouseRotating,
+                            mouseRotateStartX: this.state.mouseRotateStartX,
+                            mouseRotateStartY: this.state.mouseRotateStartY,
+                            mouseRotateStartAngle: this.state.mouseRotateStartAngle,
+                            entData: ent
+                        }
+                    );
+                } else if (ent === undefined && this.state.entData) {
+                    this.setState(
+                        {
+                            renderer: this.state.renderer,
+                            mouseRotating: this.state.mouseRotating,
+                            mouseRotateStartX: this.state.mouseRotateStartX,
+                            mouseRotateStartY: this.state.mouseRotateStartY,
+                            mouseRotateStartAngle: this.state.mouseRotateStartAngle,
+                            entData: null
+                        }
+                    );
+                }
                 if (this.state.mouseRotating) {
                     this.state.renderer.setAngle(this.state.mouseRotateStartAngle as number +
                         (e.offsetX - (this.state.mouseRotateStartX as number)) / 100);
@@ -89,7 +113,28 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
             <Stats addUpdateListener={this.props.addUpdateListener}
                 onRenderBegin={(cb) => this.state.renderer.beforeRender = cb}
                 onRenderEnd={(cb) => this.state.renderer.afterRender = cb} />
+            {this.drawEntData()}
         </div>
+    }
+
+    private drawEntData() {
+        if (this.state.entData) {
+            let data = this.state.entData as schema.EntityData;
+            return <div style={`position: fixed; bottom: 50px;
+                left: 50px; border: solid 5px;`}>
+                {data.id}
+                <br/>
+                {data.type}
+                <br/>
+                {JSON.stringify(data.location)}
+                <br/>
+                {data.hp}
+                <br/>
+                {(data.cooldownEnd || this.props.gameState.turn) - this.props.gameState.turn}
+            </div>;
+        } else {
+            return <div />
+        }
     }
 
     redraw() {
@@ -268,14 +313,15 @@ export class Renderer {
         let isxts = this.raycaster.intersectObjects(this.scene.children);
         isxts = isxts.filter(i => i.object.userData.entityID !== undefined);
         let changed;
+        let ent;
         if (isxts.length > 0) {
-            changed = this.entities.outlineEntity(this.currentState.entities[isxts[0].object.userData.entityID]);
-        } else {
-            changed = this.entities.outlineEntity(undefined);
+            ent = this.currentState.entities[isxts[0].object.userData.entityID];
         }
+        changed = this.entities.outlineEntity(ent);
         if (changed) {
             this.redraw();
         }
+        return ent;
     }
 
     redraw = frameDebounce(() => {

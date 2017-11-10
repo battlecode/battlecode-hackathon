@@ -5,6 +5,7 @@ import * as net from 'net';
 import * as byline from 'byline';
 import * as WebSocket from 'ws';
 import * as uuid from 'uuid/v4';
+import * as Ajv from 'ajv';
 
 /**
  * Wrappers for incoming / outgoing sockets.
@@ -95,7 +96,7 @@ export class Client {
             } catch (e) {
                 this.send({
                     command: "error",
-                    reason: "failed to parse command: "+data
+                    reason: "failed to parse command: "+e.message
                 });
                 return;
             }
@@ -142,13 +143,31 @@ export class Client {
     }
 }
 
-/**
- * TODO: actually validate
- */
+// We generate a json-schema for the incoming messages during `npm run build`.
+// See package.json.
+// We then generate a validator for this schema using ajv from schema.ts;
+// so the validator is always in sync with our expected input.
+const validator = Ajv({
+    verbose: true,
+
+});
+validator.addMetaSchema(require('ajv/lib/refs/json-schema-draft-04.json'));
+const validate = validator.compile(require('./incomingschema.json'));
 const validateIncoming = (command: string | Buffer) => {
     const commandS = typeof(command) === 'string' ?
       command : command.toString();
 
+    const data = JSON.parse(commandS);
 
-    return JSON.parse(commandS) as IncomingCommand;
+    const valid = validate(data);
+
+    if (!valid) {
+        if (!validate.errors) {
+            throw new Error('Invalid input');
+        } else {
+            throw new Error('Invalid input: '+validator.errorsText(validate.errors));
+        }
+    }
+
+    return data as IncomingCommand;
 };

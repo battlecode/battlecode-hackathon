@@ -55,22 +55,25 @@ export class TopBar extends Component<{}, State> {
                 <DialogButton
                     active={this.state.active[0]}
                     idx={0}
-                    color="green"
-                    label="New game"
+                    color="blue"
+                    label="Active games"
                     xOffset={25}
                     deselectAllExceptToggle={this.deselectAllExceptToggle}
-                >
-                    <NewGameMenu maps={this.props.maps} createGame={this.props.createGame} />
-                </DialogButton>
+                />
                 <DialogButton
                     active={this.state.active[1]}
                     idx={1}
-                    color="blue"
-                    label="Load game"
+                    color="green"
+                    label="New game"
                     xOffset={175}
                     deselectAllExceptToggle={this.deselectAllExceptToggle}
                 >
-                    <LoadGameMenu replays={this.props.replays} loadReplay={this.props.loadReplay} />
+                    <NewGameMenu 
+                        maps={this.props.maps} 
+                        createGame={this.props.createGame} 
+                        replays={this.props.replays}
+                        loadReplay={this.props.loadReplay}
+                    />
                 </DialogButton>
                 <DialogButton
                     active={this.state.active[2]}

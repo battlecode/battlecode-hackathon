@@ -23,11 +23,13 @@ import _thread
 import config
 
 running_games = []
+sneak = {'ng_id':None}
+
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
 MAX_GAMES = 4
-INIT_TIME = 60
+INIT_TIME = 10
 
 ELO_K = 20
 ELO_START = 1200
@@ -67,7 +69,7 @@ def unpack(filePath, destinationFilePath):
     if platform.system() == 'Windows':
         os.system("7z x -o"+tempPath+" -y "+filePath+". > NUL")
     else:
-        os.system("unzip -u -d"+tempPath+" "+filePath+" > /dev/null 2> /dev/null")
+        os.system("tar -xzf -u -C"+tempPath+" "+filePath+" > /dev/null 2> /dev/null")
 
     # Remove __MACOSX folder if present
     macFolderPath = os.path.join(tempPath, "__MACOSX")
@@ -116,16 +118,18 @@ def runGame(bots):
 def endGame(game):
     winners = []
     replays = []
-    for match in game.matches:
-        if match.winner is not None:
-            if match.sandboxes is not None:
-                for sandbox in match.sandboxes:
+    for match in game['matches']:
+        if match['winner'] is not None:
+            if match['sandboxes'] is not None:
+                for sandbox in match['sandboxes']:
                     sandbox.kill()
-                match.sandboxes = None
-            winners.append(match.winner)
-            replays.append(match.replay_data)
-    if len(winners) < len(game.matches):
+                match['sandboxes'] = None
+            winners.append(match['winner'])
+            replays.append(match['replay_data'])
+    if len(winners) < len(game['matches']):
         return
+
+    running_games.remove(game)
 
     keys = []
     for replay in replays:
@@ -142,12 +146,14 @@ def endGame(game):
             teamA += 1
         if winner==2:
             teamB += 1
-        winners[i] = game.teams[i].db_id
+        winners[i] = game['teams'][winner-1]['db_id']
 
     winner = 0 if teamA==teamB else 1 if teamA>teamB else 2
     if winner == 0:
-        print(prefix+"Game between " + game.teams[0].name + " and " + game.teams[1].name + " failed, nobody connected to the engine.")
-        c.execute("UPDATE scrimmage_matches SET status='failed' WHERE id=%s", (game.db_id))
+        print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " failed, nobody connected to the engine.")
+        print("db id: " + str(game['db_id']))
+        c.execute("UPDATE scrimmage_matches SET status='failed' WHERE id=%s", [game['db_id']])
+        conn.commit()
         return
 
     redElo = getTeamRating(game['teams'][0]['botID'])
@@ -162,41 +168,42 @@ def endGame(game):
     red_elo = int(round(r_1 + ELO_K*(2-winner-e_1)))
     blue_elo = int(round(r_2 + ELO_K*(winner-1-e_2)))
 
-    print(prefix+"Game between " + game.teams[0].name + " and " + game.teams[1].name + "completed (" + ("red" if winner==1 else "blue") + " won), new elos: " + str(red_elo) + " and " +str(blue_elo) + ".")
+    print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "completed (" + ("red" if winner==1 else "blue") + " won), new elos: " + str(red_elo) + " and " +str(blue_elo) + ".")
 
-    c.execute("UPDATE scrimmage_matches SET status='completed', match_files=%s, match_winners=%s, red_rating_after=%s, blue_rating_after=%s WHERE id=%s", (keys,winners,game.db_id, red_elo,blue_elo))
+    c.execute("UPDATE scrimmage_matches SET status='completed', match_files=%s, match_winners=%s, red_rating_after=%s, blue_rating_after=%s WHERE id=%s", [keys,winners,game['db_id'], red_elo,blue_elo])
+    conn.commit()
 
-def listen(games, socket):
+def listen(games, socket, sneak):
+    socket = socket.makefile('rwb',2**16)
     while True:
-        message = json.loads(next(socket))
-        if message['command'] == 'createGameIDConfirm':
-            games[-1]['ng_id'] = message['gameID']
+        message = json.loads(next(socket).decode())
+        if message['command'] == 'createGameConfirm':
+            sneak['ng_id'] = message['gameID']
         else:
             for game in games:
-                for match in game.matches:
+                for match in game['matches']:
                     if match['ng_id'] == message['id']:
                         if message['command'] == 'playerConnected':
                             match['connected'][int(message['team'])-1] = True
-                            print(prefix+game.teams[int(message['team'])-1].name + " connected in match against " + game.teams[int(not bool(int(message['team'])))-1].name + ".")
+                            print(prefix+game['teams'][int(message['team'])-1]['name'] + " connected in match against " + game['teams'][int(not bool(int(message['team'])))-1]['name'] + ".")
                         if message['command'] == 'gameReplay':
-                            match.replay_data = message['matchData']
-                            match.winner = int(message['winner'])
-                            print(prefix+"Match between " + game.teams[0].name + " and " + game.teams[1].name + "ended (" + ("red" if match.winner==1 else "blue" if match.winner==2 else "nobody") + " won).")
+                            match['replay_data'] = message['matchData']
+                            match['winner'] = int(message['winner'])
+                            print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "ended (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
 
                             endGame(game)
         time.sleep(0.005)
 
 
-def startGame(teams, map):
-    command = {"command":"createGame","serverKey":config.SERVER_KEY,"teams":teams,"map":map,"sendReplay":True}
-    s.send(json.dumps(command))
-    received = json.loads(s.recv(BUFFER_SIZE))
-    return received['gameID']
+def startGame(teams, match_map):
+    command = json.dumps({"command":"createGame","serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True})
+    s.send(command.encode())
+    s.send(b'\n')
 
 def getTeamRating(id):
-    c.execute("SELECT red_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and scrimmage_status = 'completed' and red_team = %s ORDER BY finish_time DESC",(id))
+    c.execute("SELECT red_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and scrimmage_status = 'completed' and red_team = %s ORDER BY finish_time DESC",[id])
     redElos = c.fetchone()
-    c.execute("SELECT blue_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and scrimmage_status = 'completed' and red_team = %s ORDER BY finish_time DESC",(id))
+    c.execute("SELECT blue_rating_after, finish_time FROM scrimmage_matches WHERE ranked = TRUE and scrimmage_status = 'completed' and red_team = %s ORDER BY finish_time DESC",[id])
     blueElos = c.fetchone()
 
     elos = sorted([redElos+blueElos],key=lambda x: x[1],reverse=True)
@@ -211,7 +218,7 @@ def getTeamRating(id):
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
     s.connect(('127.0.0.1', 6147))
-    _thread.start_new_thread(listen,(running_games, s))
+    _thread.start_new_thread(listen,(running_games, s, sneak))
 except Exception as e:
     print(prefix + "Failed to connect to engine. Exiting.")
     sys.exit()
@@ -219,50 +226,56 @@ except Exception as e:
 print(prefix + "Connected to engine.  Queueing games now.")
 
 while True:
-    c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.id as red_name, t2.id as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
+    c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
     queuedGames = c.fetchall()
 
-    if len(running_games) >= MAX_GAMES or len(matches) < 1:
+    if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
         time.sleep(0.005)
-
         for game in running_games:
-            for match in game.matches:
-                if not all(match['connected']) and (datetime.datetime.now() - game['start']).total_seconds() > 60:
+            for match in game['matches']:
+                timePassed = (datetime.datetime.now() - game['start']).total_seconds()
+                if not all(match['connected']) and timePassed > INIT_TIME:
                     winners = []
                     for i in range(2):
                         if match['connected'][i]:
                             winners.append(i+1)
-                    match.winner = 0 if len(winners)==0 else 1 if winners[0]==0 else 2
+                    match['winner'] = 0 if len(winners)==0 else 1 if winners[0]==0 else 2
                     endGame(game)
-                    print(prefix+"Match between " + game.teams[0].name + " and " + game.teams[1].name + "timed out (" + ("red" if match.winner==1 else "blue" if match.winner==2 else "nobody") + " won).")
+                    print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "timed out (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
         continue
 
     queuedGame = queuedGames[0]
 
-    print(prefix+"Queuing game between " + game.teams[0].name + " and " + game.teams[1].name + ".")
+    print(prefix+"Queuing game between " + queuedGame[5] + " and " + queuedGame[6] + ".")
 
-    c.execute("UPDATE scrimmage_matches SET status='running' WHERE id=%s",(queuedGame[0]))
+    c.execute("UPDATE scrimmage_matches SET status='running' WHERE id=%s",[queuedGame[0]])
+    conn.commit()
 
-    bucket.download_file(queuedGame[3], 'botA.zip')
-    bucket.download_file(queuedGame[4], 'botB.zip')
+    bucket.download_file(queuedGame[3][49:], 'botA.tar.gz')
+    bucket.download_file(queuedGame[4][49:], 'botB.tar.gz')
     
     maps = []
     for mapID in queuedGame[7]:
-        c.execute("SELECT name from scrimmage_maps WHERE id=%s",(mapID))
-        maps.append(c.fetchone)
+        c.execute("SELECT name from scrimmage_maps WHERE id=%s",[mapID])
+        maps.append(c.fetchone()[0])
 
     matches = []
     teams = [{"name":queuedGame[5],"key":None,"db_id":queuedGame[1]},{"name":queuedGame[6],"key":None,"db_id":queuedGame[2]}]
-    for index, map in enumerate(maps):
+    for index, cur_map in enumerate(maps):
         redKey, blueKey = random_key(20), random_key(20)
-        bots = [{"botID": queuedGame[1], "key":redKey, "path": "botA.zip"},{"botID": queuedGame[2], "key":blueKey, "path": "botB.zip"}]
+        bots = [{"botID": queuedGame[1], "key":redKey, "path": "botA.tar.gz"},{"botID": queuedGame[2], "key":blueKey, "path": "botB.tar.gz"}]
 
-        teams[0].key = redKey
-        teams[1].key = blueKey
+        teams[0]['key'] = redKey
+        teams[1]['key'] = blueKey
 
-        ng_id = startGame(teams,map)
-        print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + " on " + map + ".")
-        matches.append({"ng_id":ng_id,"sandboxes":runGame(bots),"connected":[False,False],"replay_data":None,"winner":None})
+        startGame(teams,cur_map)
+        print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + " on " + cur_map + ".")
+
+        while sneak['ng_id'] is None:
+            time.sleep(0.005)
+
+        matches.append({"ng_id":sneak['ng_id'],"sandboxes":runGame(bots),"connected":[False,False],"replay_data":None,"winner":None})
+        sneak['ng_id'] = None
 
     running_games.append({'db_id':queuedGame[0],'start':datetime.datetime.now(),'teams':teams,'matches':matches})
 

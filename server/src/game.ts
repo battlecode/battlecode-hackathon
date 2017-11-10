@@ -238,7 +238,7 @@ export class Game {
 
         // Generate random winning team
         if (winningTeamID < 0) {
-            winningTeamID = Math.floor(Math.random()*(this.teams.length-2)+1);
+            winningTeamID = Math.floor(Math.random()*(this.teams.length-1)+1);
         }
         
         return winningTeamID;

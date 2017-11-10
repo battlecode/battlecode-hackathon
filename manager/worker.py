@@ -28,7 +28,7 @@ sneak = {'ng_id':None,'DB_BEING_USED':False}
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
-MAX_GAMES = 4
+MAX_GAMES = 2
 INIT_TIME = 10
 
 ELO_K = 20
@@ -112,7 +112,9 @@ def endGame(game,sneak):
     if len(winners) < len(game['matches']):
         return
 
-    running_games.remove(game)
+    for running_game in running_games:
+        if game['db_id'] == running_game['db_id']:
+            running_games.remove(running_game)
 
     keys = []
     for replay in replays:
@@ -137,7 +139,7 @@ def endGame(game,sneak):
         while sneak['DB_BEING_USED']:
             time.sleep(0.005)
         sneak['DB_BEING_USED'] = True
-        c.execute("UPDATE scrimmage_matches SET status='failed' finish_time=CURRENT_TIMESTAMP WHERE id=%s", [game['db_id']])
+        c.execute("UPDATE scrimmage_matches SET status='failed', finish_time=CURRENT_TIMESTAMP WHERE id=%s", [game['db_id']])
         conn.commit()
         sneak['DB_BEING_USED'] = False
         return

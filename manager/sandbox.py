@@ -100,8 +100,8 @@ class Sandbox:
         return False
 
     def start(self, shell_command):
-        shell_command = "docker run -d -v "+self.working_directory+":"+self.working_directory+" --privileged=true 8ace9c5ae439 sh -c \'" + shell_command + " " + self.docker_ip + " \'"
-        #print(shell_command)
+        shell_command = "docker run -d -v "+self.working_directory+":"+self.working_directory+" --cpus='1' --memory='256m' --memory-swap='256m' --privileged=true 817fdb26d5bf sh -c \'" + shell_command + " " + self.docker_ip + " \'"
+        print(shell_command)
 
         if self.is_alive:
             raise SandboxError("Tried to run command with one in progress.")

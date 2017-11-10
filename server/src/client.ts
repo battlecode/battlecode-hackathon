@@ -29,7 +29,6 @@ type SocketEnum =
     {type: 'web', web: WebSocket};
 
 //const debug = (msg: string) => console.log(msg);
-const debug = (msg: string) => {};
 
 export class Client {
     /**
@@ -64,7 +63,7 @@ export class Client {
     static sendToAll(command: OutgoingCommand, clients: Client[]) {
         const serialized = JSON.stringify(command);
         for (let client of clients) {
-            debug(client.id + " < " + serialized);
+            //debug(client.id + " < " + serialized);
             client.sendString(serialized);
         }
     }
@@ -103,7 +102,7 @@ export class Client {
                 });
                 return;
             }
-            debug(this.id + " > "+JSON.stringify(command));
+            //debug(this.id + " > "+JSON.stringify(command));
             callback(command, this);
         };
         if (this.socket.type === 'tcp') {
@@ -123,7 +122,7 @@ export class Client {
     }
 
     send(command: OutgoingCommand) {
-        debug(this.id + " < " + JSON.stringify(command));
+        //debug(this.id + " < " + JSON.stringify(command));
         this.sendString(JSON.stringify(command));
     }
 

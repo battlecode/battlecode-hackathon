@@ -24,6 +24,7 @@ import {
     ListMapsResponse,
     ListReplaysResponse,
     ReplayResponse,
+    GameStatusUpdate,
 } from './schema';
 
 import ClientError from './error';
@@ -89,6 +90,8 @@ export class Lobby {
     isPickup: boolean;
     timeoutMS: number;
 
+    status: GameStatusUpdate;
+
     constructor(id: GameID,
                 create: CreateGame,
                 spectators: Client[],
@@ -96,12 +99,13 @@ export class Lobby {
                 client?: Client) {
         this.id = id;
         this.debug = debug;
-        this.timeoutMS = create.timeoutMS;
+        this.timeoutMS = create.timeoutMS ?
+            create.timeoutMS : 100;
 
         // if no teams have keys, this is a pickup game
         this.isPickup = create.teams ?
-            create.teams.find(t => t.key !== undefined) !== undefined
-            : true;
+            create.teams[0].key === undefined :
+            true;
 
         if (typeof create.map === "string") {
             this.map = JSON.parse(fs.readFileSync(path.join(paths.MAPS, create.map)).toString());
@@ -112,6 +116,9 @@ export class Lobby {
 
         if (create.teams) {
             this.requiredTeams = create.teams;
+            for (let i = 0; i < this.requiredTeams.length; i++) {
+                this.requiredTeams[i].teamID = i + 1;
+            }
         } else {
             this.requiredTeams = [];
             for (let i = 0; i < this.map.teamCount; i++) {
@@ -130,6 +137,14 @@ export class Lobby {
         }
 
         this.spectators = spectators;
+
+        this.status = {
+            command: "gameStatusUpdate",
+            gameID: this.id,
+            connected: 0,
+            status: "lobby"
+        }
+        Client.sendToAll(this.status, this.spectators);
     }
 
     /**
@@ -169,12 +184,12 @@ export class Lobby {
             };
             client.send(confirmation);
 
-            for (let observer of this.observers) {
-                observer.send({
-                    command: 'playerConnected',
-                    team: newTeam.teamID
-                });
-            }
+            Client.sendToAll({
+                command: 'playerConnected',
+                team: newTeam.teamID
+            }, this.observers);
+            this.status.connected++;
+            Client.sendToAll(this.status, this.spectators);
 
             if (this.requiredTeams.length == 0) {
                 return new GameRunner(this.id,
@@ -183,7 +198,8 @@ export class Lobby {
                     this.observers,
                     this.spectators,
                     this.debug,
-                    this.timeoutMS
+                    this.timeoutMS,
+                    this.status
                 );
             } else {
                 return undefined;
@@ -205,6 +221,10 @@ export class Lobby {
         for (let i = 0; i < this.playerTeams.length; i++) {
             if (this.playerTeams[i][0].id == id) {
                 // client was playing, we need to shutdown now
+
+                this.status.status = "cancelled";
+                this.status.connected = 0;
+                Client.sendToAll(this.status, this.spectators);
                 return true;
             }
         }
@@ -230,6 +250,8 @@ export class GameRunner {
     // the handle of the timeout that was created to time out the last turn
     timeoutHandle?: NodeJS.Timer;
 
+    status: GameStatusUpdate;
+
     constructor(
         id: GameID,
         map: MapFile,
@@ -237,7 +259,8 @@ export class GameRunner {
         observers: Client[],
         spectators: Client[],
         debug: boolean,
-        timeoutMS: number
+        timeoutMS: number,
+        status: GameStatusUpdate
     ) {
         this.id = id;
         this.playerClients = [];
@@ -258,6 +281,7 @@ export class GameRunner {
         this.pastTurns = [];
         this.started = false;
         this.spectators = spectators;
+        this.status = status;
     }
 
     async broadcast(command: OutgoingCommand) {
@@ -286,6 +310,8 @@ export class GameRunner {
         };
         await this.broadcast(start);
         this.started = true;
+        this.status.status = "running";
+        Client.sendToAll(this.status, this.spectators);
         const firstTurn = this.game.firstTurn();
         await this.broadcast(firstTurn);
         this.pastTurns.push(firstTurn);
@@ -349,6 +375,15 @@ export class GameRunner {
 
         if (nextTurn.winnerID) {
             this.winner = this.game.teams[nextTurn.winnerID];
+
+            this.status.status = "finished";
+            Client.sendToAll(this.status, this.spectators);
+            for (let client of this.playerClients) {
+                client.close();
+            }
+            let replay = await this.makeReplay();
+            replay.winner = this.winner;
+            Client.sendToAll(replay, this.observers);
         } else {
             this.startTimeout();
         }
@@ -391,6 +426,9 @@ export class GameRunner {
             if (this.timeoutHandle) {
                 clearTimeout(this.timeoutHandle);
             }
+            this.status.status = "cancelled";
+            this.status.connected = 0;
+            Client.sendToAll(this.status, this.spectators);
             return true;
         }
         for (let i = 0; i < this.observers.length; i++) {
@@ -426,7 +464,6 @@ const prettyID = (id: string | undefined): string => {
 export interface ServerOpts {
     tcpPort: number;
     wsPort: number;
-    unixSocket: string | undefined;
 
     debug: boolean;
 
@@ -467,21 +504,6 @@ export default class Server {
             client.onClose(this.handleClose);
         });
         this.tcp.listen(this.opts.tcpPort);
-
-        // We're not running on windows
-        if (this.opts.unixSocket) {
-            this.log(`Unix raw socket listening on ${this.opts.unixSocket}`);
-            if (fs.existsSync(this.opts.unixSocket)) {
-                fs.unlinkSync(this.opts.unixSocket);
-            }
-            let unixServer = new net.Server((socket: net.Socket) => {
-                const client = Client.fromTCP(socket);
-                this.log(`Client connected via unix raw socket: ${prettyID(client.id)}`);
-                client.onCommand(this.handleCommand);
-                client.onClose(this.handleClose);
-            });
-            unixServer.listen(this.opts.unixSocket);
-        }
 
         this.log(`WebSocket listening on :${this.opts.wsPort}`);
         let httpServer = new http.Server();
@@ -682,9 +704,26 @@ export default class Server {
     };
 
     private handleLogin = async (login: Login, client: Client) => {
-        let gameID: GameID;
+        let gameID: GameID | undefined;
         if (login.gameID) {
             gameID = login.gameID;
+        } else if (login.key !== undefined) {
+            for (let game of this.games.values()) {
+                if (game instanceof GameRunner) continue;
+
+                for (let team of game.requiredTeams) {
+                    if (team.key === login.key) {
+                        gameID = game.id;
+                        break;
+                    }
+                }
+                if (gameID !== undefined){ 
+                    break;
+                }
+            }
+            if (gameID === undefined) {
+                throw new ClientError('no game with key: '+login.key);
+            }
         } else {
             gameID = await this.findPickupGame();
         }

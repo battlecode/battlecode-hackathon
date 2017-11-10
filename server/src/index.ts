@@ -407,7 +407,8 @@ export class GameRunner {
             version: "battlecode 2017 hackathon match",
             initialState: this.game.initialState,
             gameID: this.id,
-            teams: this.game.teams,
+            // skip neutral
+            teams: this.game.teams.slice(1),
             turns: this.pastTurns.sort((a, b) => a.turn - b.turn),
             winner: this.winner ? this.winner.teamID : undefined
         };

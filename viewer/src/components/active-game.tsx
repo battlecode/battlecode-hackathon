@@ -61,9 +61,9 @@ export class ActiveGame extends Component<Props, State> {
                     Map: {this.props.game.mapName}
                 </div>
                 <div>
-                    <span class="red">{this.props.game.playerOne} </span>
+                    <span class="red">{this.props.game.playerOne || 'pending'} </span>
                     vs.
-                    <span class="blue"> {this.props.game.playerTwo}</span>
+                    <span class="blue"> {this.props.game.playerTwo || 'pending'}</span>
                 </div>
                 {this.state.aboutToClose ? (
                      <span>

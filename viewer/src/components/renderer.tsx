@@ -17,6 +17,8 @@ import * as state from '../state';
 import { TOP_BAR_HEIGHT } from '../constants';
 
 import { Stats } from './stats';
+import { SectorData } from '../schema';
+import LocationMap from '../locationmap';
 
 // World coordinates:
 // x, y are [0,width) x [0, height)
@@ -53,18 +55,16 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
     }
 
     render() {
-        return <div
+                return <div
             onmousedown={(e) => {
                 if (e.button === 1 || e.button === 2) {
                     this.state.mouseRotating = true;
                     this.state.mouseRotateStartX = e.offsetX;
                     this.state.mouseRotateStartY = e.offsetY;
                     this.state.mouseRotateStartAngle = this.state.renderer.angle;
-                    this.redraw();
                 } else if (e.button === 0) {
                     this.state.renderer.setCamera(this.state.renderer.cameraName === 'isometric' ?
                         'topDown' : 'isometric');
-                    this.redraw();
                 }
             }}
             onmousemove={(e) => {
@@ -96,7 +96,6 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
                     this.state.renderer.setAngle(this.state.mouseRotateStartAngle as number +
                         (e.offsetX - (this.state.mouseRotateStartX as number)) / 100);
                     e.preventDefault();
-                    this.redraw();
                 }
             }}
             onmouseup={(e) => {
@@ -106,7 +105,6 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
                     this.state.mouseRotateStartY = undefined;
                     this.state.mouseRotateStartAngle = undefined;
                     e.preventDefault();
-                    this.redraw();
                 }
             }}
             ref={(input) => this.domNode = input} >
@@ -137,11 +135,6 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
         }
     }
 
-    redraw() {
-        this.state.renderer.updateSize();
-        this.state.renderer.redraw();
-    }
-
     componentDidMount() {
         if (this.state === null) return;
         this.domNode.appendChild(this.state.renderer.domElement);
@@ -150,7 +143,8 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
     componentDidUpdate() {
         if (this.state === null) return;
         this.state.renderer.update(this.props.gameState);
-        this.redraw();
+        this.state.renderer.updateSize();
+        this.state.renderer.redraw();
     }
 }
 
@@ -171,6 +165,8 @@ export class Renderer {
     teamColors: TeamColors;
 
     entities: Entities;
+
+    sectors: Sectors;
 
     map: state.State;
 
@@ -206,8 +202,10 @@ export class Renderer {
 
         // add the robots to the world
         this.entities = new Entities(this.scene);
-
         this.entities.setEntities(start.entities);
+
+        this.sectors = new Sectors(this.scene, this.map.width, this.map.height);
+        this.sectors.setSectors(start.sectors.values());
 
         const ambient = new AmbientLight("#fff", .4);
         this.scene.add(ambient);
@@ -274,6 +272,7 @@ export class Renderer {
         }
         this.currentState = state;
         this.entities.setEntities(state.entities);
+        this.sectors.setSectors(state.sectors.values());
     }
 
     cameraName: string;
@@ -288,7 +287,6 @@ export class Renderer {
         } else {
             this.directional.castShadow = true;
         }
-        this.redraw();
     }
 
     setAngle(angle: number) {
@@ -318,9 +316,6 @@ export class Renderer {
             ent = this.currentState.entities[isxts[0].object.userData.entityID];
         }
         changed = this.entities.outlineEntity(ent);
-        if (changed) {
-            this.redraw();
-        }
         return ent;
     }
 
@@ -329,6 +324,64 @@ export class Renderer {
         this.renderer.render(this.scene, this.activeCamera);
         this.afterRender();
     });
+}
+
+class Sectors {
+    scene: Scene;
+    sectors: LocationMap<Mesh | undefined>;
+    geometry: THREE.BufferGeometry;
+    materials: THREE.MeshBasicMaterial[];
+
+    constructor(scene: Scene, width: number, height: number) {
+        this.scene = scene;
+        this.sectors = new LocationMap(Math.ceil(width / 5), Math.ceil(height / 5));
+        let g = new THREE.Geometry()
+        g.vertices.push(
+            new THREE.Vector3( -.5,  -.5, 0 ),
+            new THREE.Vector3(5-.5,  -.5, 0 ),
+            new THREE.Vector3( -.5, 5-.5, 0 ),
+            new THREE.Vector3(5-.5, 5-.5, 0 ),
+            new THREE.Vector3( -.5+.01,  -.5+.01, .1),
+            new THREE.Vector3(5-.5+.01,  -.5+.01, .1),
+            new THREE.Vector3( -.5+.01, 5-.5+.01, .1),
+            new THREE.Vector3(5-.5+.01, 5-.5+.01, .1),
+        );
+        g.faces.push(
+            new THREE.Face3(0,1,4),
+            new THREE.Face3(4,1,5),
+            new THREE.Face3(2,3,6),
+            new THREE.Face3(6,3,7),
+            new THREE.Face3(0,2,6),
+            new THREE.Face3(0,6,4),
+            new THREE.Face3(1,3,7),
+            new THREE.Face3(1,7,5),
+        );
+        this.geometry = new THREE.BufferGeometry().fromGeometry(g);
+        this.materials = [];
+        for (let col of TEAM_COLORS) {
+            this.materials.push(new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide}));
+        }
+    }
+
+    setSectors(sectors: SectorData[]) {
+        for (let sector of sectors) {
+            let mesh = this.sectors.get(sector.topLeft.x / 5, sector.topLeft.y / 5);
+
+            if (!mesh) {
+                mesh = new Mesh(this.geometry, this.materials[0]);
+                mesh.position.set(sector.topLeft.x, sector.topLeft.y, 0);
+                this.sectors.set(sector.topLeft.x / 5, sector.topLeft.y / 5, mesh);
+            }
+
+            if (sector.controllingTeamID === 0) {
+                this.scene.remove(mesh);
+                continue;
+            }
+
+            mesh.material = this.materials[sector.controllingTeamID];
+            this.scene.add(mesh);
+        }
+    }
 }
 
 /**

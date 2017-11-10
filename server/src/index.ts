@@ -408,7 +408,7 @@ export class GameRunner {
             initialState: this.game.initialState,
             gameID: this.id,
             teams: this.game.teams,
-            turns: this.pastTurns,
+            turns: this.pastTurns.sort((a, b) => a.turn - b.turn),
             winner: this.winner ? this.winner.teamID : undefined
         };
 

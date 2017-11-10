@@ -105,9 +105,7 @@ export const handler = (options) => {
 
             const viewerDir = path.join(distDir, 'viewer');
 
-            var fileServer = new statik.Server(viewerDir, {
-                indexFile: path.join(viewerDir, 'index.html')
-            });
+            var fileServer = new statik.Server(viewerDir, {cache: 60});
             
             http.createServer((request, response) => {
                 request.addListener('end', () => {

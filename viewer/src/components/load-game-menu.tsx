@@ -16,7 +16,13 @@ export class LoadGameMenu extends Component<Props, State> {
 
     constructor(props: Props) {
         super(props);
-        this.state = {};
+        if (props.replays.length > 0) {
+            this.state = {
+                replay: props.replays[0],
+            };
+        } else {
+            this.state = {};
+        }
     }
 
     onChange = (e: any) => {

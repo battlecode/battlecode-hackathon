@@ -1,3 +1,7 @@
 manager/config.py
 .vscode
 *.swp
+*~
+*.pyc
+**/npm-debug.log
+

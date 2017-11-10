@@ -104,7 +104,7 @@ class Sandbox:
 
 	def start(self, shell_command):
 		"""Start a command running in the sandbox"""
-		shell_command = "docker run  -v "+self.working_directory+":"+self.working_directory+" --privileged=true 3ba7f4dfcaf9 sh -c \'" + shell_command + " " + self.docker_ip + " \'"
+		shell_command = "docker run  -v "+self.working_directory+":"+self.working_directory+" --privileged=true 8ace9c5ae439 sh -c \'" + shell_command + " " + self.docker_ip + " \'"
 		print(shell_command)
 
 		if self.is_alive:

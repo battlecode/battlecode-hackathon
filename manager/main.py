@@ -126,7 +126,7 @@ def endGame(game):
 			replays.append(match.replay_data)
 	if len(winners) < len(game.matches):
 		return
-	
+
 	keys = []
 	for replay in replays:
 		if replay is None:
@@ -143,7 +143,7 @@ def endGame(game):
 		if winner==2:
 			teamB += 1
 		winners[i] = game.teams[i].db_id
-	
+
 	winner = 0 if teamA==teamB else 1 if teamA>teamB else 2
 	if winner == 0:
 		print(prefix+"Game between " + game.teams[0].name + " and " + game.teams[1].name + " failed, nobody connected to the engine.")
@@ -152,10 +152,10 @@ def endGame(game):
 
 	redElo = getTeamRating(game['teams'][0]['botID'])
 	blueElo = getTeamRating(game['teams'][1]['botID'])
-	
+
 	r_1 = 10**(redElo/400)
 	r_2 = 10**(blueElo/400)
-	
+
 	e_1 = r_1/(r_1+r_2)
 	e_2 = r_2/(r_1+r_2)
 
@@ -168,6 +168,7 @@ def endGame(game):
 
 def listen(games, socket):
 	while True:
+		socket = socket.makefile('rwb',2**16)
 		message = json.loads(next(socket))
 		if message['command'] == 'createGameIDConfirm':
 			games[-1]['ng_id'] = message['gameID']
@@ -182,7 +183,7 @@ def listen(games, socket):
 							match.replay_data = message['matchData']
 							match.winner = int(message['winner'])
 							print(prefix+"Match between " + game.teams[0].name + " and " + game.teams[1].name + "ended (" + ("red" if match.winner==1 else "blue" if match.winner==2 else "nobody") + " won).")
-								
+
 							endGame(game)
 		time.sleep(0.005)
 
@@ -204,7 +205,7 @@ def getTeamRating(id):
 	elo = ELO_START
 	if len(elos) > 0:
 		elo = elos[0][0]
-	
+
 	return elo
 
 
@@ -222,7 +223,7 @@ while True:
 	c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.id as red_name, t2.id as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
 	queuedGames = c.fetchall()
 
-	if len(running_games) >= MAX_GAMES or len(matches) < 1:
+	if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
 		time.sleep(0.005)
 
 		for game in running_games:
@@ -238,7 +239,7 @@ while True:
 		continue
 
 	queuedGame = queuedGames[0]
-	
+
 	print(prefix+"Queuing game between " + game.teams[0].name + " and " + game.teams[1].name + ".")
 
 	c.execute("UPDATE scrimmage_matches SET status='running' WHERE id=%s",(queuedGame[0]))
@@ -254,7 +255,7 @@ while True:
 
 		teams[0].key = redKey
 		teams[1].key = blueKey
-	
+
 		ng_id = startGame(teams,map)
 		print(prefix + " --> Starting match " + str(index) + " of " + str(len(queuedGame[7])) + ".")
 		matches.append({"ng_id":ng_id,"sandboxes":runGame(bots),"connected":[False,False],"replay_data":None,"winner":None})

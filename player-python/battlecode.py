@@ -750,7 +750,11 @@ class State(object):
                 continue
             yield entity
 
-DEFAULT_SERVER = ('localhost', 6147)
+if 'BATTLECODE_IP' not in os.environ:
+    DEFAULT_SERVER = ('localhost', 6147)
+else:
+    print('Connecting to', (os.environ['BATTLECODE_IP'], 6147))
+    DEFAULT_SERVER = (os.environ['BATTLECODE_IP'], 6147)
 
 class Game(object):
     '''A game that's currently running.'''

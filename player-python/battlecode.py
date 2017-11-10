@@ -1131,10 +1131,11 @@ class State(object):
                 continue
             yield entity
 
-if os.name == 'nt':
+if 'BATTLECODE_IP' not in os.environ:
     DEFAULT_SERVER = ('localhost', 6147)
 else:
-    DEFAULT_SERVER = '/tmp/battlecode.sock'
+    print('Connecting to', (os.environ['BATTLECODE_IP'], 6147))
+    DEFAULT_SERVER = (os.environ['BATTLECODE_IP'], 6147)
 
 class Game(object):
     '''
@@ -1182,6 +1183,8 @@ class Game(object):
 
         self._recv_queue = Queue()
 
+        self._missed_turns = set()
+
         commThread = threading.Thread(target=self._recv_thread, name='Battlecode Communication Thread')
         commThread.daemon = True
         commThread.start()
@@ -1208,8 +1211,6 @@ class Game(object):
         self.state = State(self, teams, self.my_team_id, initialState)
 
         self.winner = None
-
-        self._missed_turns = set()
 
         # wait for our first turn
         self._next_team = None
@@ -1239,11 +1240,13 @@ class Game(object):
             result = json.loads(message)
 
             if "command" not in result:
+                self._recv_queue.put(None)
                 raise BattlecodeError("Unknown result: "+str(result))
-                sys.exit(1)
             elif result['command'] == 'error':
-                raise BattlecodeError(result['reason'])
-                sys.exit(1)
+                if result['reason'].startswith('wrong turn'):
+                    sys.stderr.write('Battlecode warning: missed turn, speed up your code!\n')
+                else:
+                    raise BattlecodeError(result['reason'])
             elif result['command'] == 'missedTurn':
                 sys.stderr.write('Battlecode warning: missed turn {}, speed up your code!\n'.format(result['turn']))
                 self._missed_turns.add(result['turn'])
@@ -1302,13 +1305,11 @@ class Game(object):
                 if turn['lastTeamID'] == self.state.my_team.id:
                     # handle what happened last turn
                     for action, reason in zip(turn['failed'], turn['reasons']):
-                        print('{}failed: {}:{} turn {} reason: {}{}'.format(
-                            _TERM_RED,
+                        print('failed: {}:{} reason: {}'.format(
                             action['id'],
                             action['action'],
                             self.state.turn,
                             reason,
-                            _TERM_END
                         ))
 
             if turn['nextTeamID'] == self.state.my_team.id and not self._can_recv_more():

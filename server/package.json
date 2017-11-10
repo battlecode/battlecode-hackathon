@@ -1,6 +1,6 @@
 {
-  "name": "@battlecode/battlehack17",
-  "version": "1.0.0",
+  "name": "@battlecode/battlehack",
+  "version": "0.0.1",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,9 +8,12 @@
     "battlehack": "dist/src/cli/cli.js"
   },
   "scripts": {
-    "build": "tsc && typescript-json-schema src/schema.ts IncomingCommand -o dist/src/incomingschema.json",
+    "build": "tsc",
     "start": "npm run build && node dist/src/cli/cli.js",
-    "test": "tsc && ava dist/test"
+    "test": "tsc && ava dist/test",
+    "build-viewer": "npm run build --prefix ../viewer",
+    "copy-viewer": "mkdir -p ./dist/viewer && cp -R ../viewer/dist ./dist/viewer/dist && cp ../viewer/index.html ./dist/viewer && rm ./dist/viewer/dist/report.html",
+    "prepublish": "rm -rf ./dist && npm run build && npm run build-viewer && npm run copy-viewer"
   },
   "repository": {
     "type": "git",
@@ -51,7 +54,6 @@
   "devDependencies": {
     "ava": "^0.23.0",
     "ts-node": "^3.3.0",
-    "typescript": "^2.5.3",
-    "typescript-json-schema": "^0.19.0"
+    "typescript": "^2.5.3"
   }
 }

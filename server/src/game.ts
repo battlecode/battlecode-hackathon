@@ -125,7 +125,7 @@ export class Game {
     makeTurn(team: TeamID, turn: number, actions: Action[]): NextTurn {
         // player will send the last turn id they received
         if (turn !== this.turn + 1) {
-            throw new ClientError("wrong turn: given: "+turn+", should be: "+this.turn + 1);
+            throw new ClientError("wrong turn: given: "+turn+", should be: "+(this.turn + 1));
         }
         this.turn += 1;
         if (team !== this.nextTeam) {
@@ -538,8 +538,6 @@ export class Game {
             y: initial.y + action.dy,
         }
         if (isOutOfBound(targetLoc, this.initialState) || this.occupied.has(targetLoc.x, targetLoc.y)) {
-            console.log(targetLoc);
-            console.log(this.occupied.get(targetLoc.x, targetLoc.y));
             return "Not enough room to throw; must have at least one space free in direction of throwing: "
                 + entity.id + " Direction dx: " + action.dx + " dy: " + action.dy;
         }
@@ -588,12 +586,6 @@ export class Game {
         // damage held unit if unit lands on dirt
         if (this.getTile(landloc) === "D") {
             this.dealDamage(held.id, DAMAGES.dirt);
-        }
-        if(held.id === 146) {
-            console.log(target);
-            console.log(held);
-            console.log(targetLoc);
-            console.log(landloc);
         }
         if(held.hp >0)
             this.occupied.set(held.location.x, held.location.y, held.id);

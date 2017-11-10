@@ -27,7 +27,7 @@ interface State {
     active: boolean[];
 }
 
-export class TopBar extends Component<{}, State> {
+export class TopBar extends Component<Props, State> {
 
     state: State;
 

@@ -25,11 +25,6 @@ export const builder = <any>{
         describe: 'Websocket port to host games on',
         type: 'number'
     },
-    'unix-socket': {
-        default: /^win/.test(process.platform) ? undefined : '/tmp/battlecode.sock',
-        describe: 'Unix raw socket to host games on',
-        type: 'string'
-    },
     'viewer': {
         default: true,
         describe: 'Run the viewer (--no-viewer to disable)',
@@ -73,7 +68,6 @@ export const handler = (options) => {
     let server = new Server({
         tcpPort: options['tcp-port'],
         wsPort: options['ws-port'],
-        unixSocket: options['unix-socket'],
 
         debug: options['debug'],
         log: engineLog,
@@ -111,9 +105,7 @@ export const handler = (options) => {
 
             const viewerDir = path.join(distDir, 'viewer');
 
-            var fileServer = new statik.Server(viewerDir, {
-                indexFile: path.join(viewerDir, 'index.html')
-            });
+            var fileServer = new statik.Server(viewerDir, {cache: 60});
             
             http.createServer((request, response) => {
                 request.addListener('end', () => {

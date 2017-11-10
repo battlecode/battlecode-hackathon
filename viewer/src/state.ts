@@ -8,6 +8,12 @@ import {inflate} from 'pako/lib/inflate';
 import * as base64 from 'base64-js';
 import cloneDeep from 'lodash-es/cloneDeep';
 
+import {ActiveGameInfo} from './types';
+import {
+    getCloseActiveGame,
+    getViewActiveGame,
+} from './index';
+
 export class State {
     gameID: schema.GameID;
     sectors: LocationMap<schema.SectorData>;
@@ -106,9 +112,7 @@ export class Timeline {
         while (newCurrent.turn < turn) {
             // async, don't block the ui thread
             if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
-
             const delta = this.deltas[newCurrent.turn + 1];
-
             newCurrent.apply(delta);
             for (let cb of this.changeCbs) {
                 cb(newCurrent, delta);
@@ -123,7 +127,7 @@ export class Timeline {
     }
 
     async loadNextNTurns(numTurns: number, callback?: () => void) {
-        if (numTurns < 0) throw new Error("out of range: "+numTurns);
+        if (numTurns <= 0) throw new Error("out of range: "+numTurns);
 
         let lock = await this.loadLock.acquire();
         let newCurrent = cloneDeep(this.current);
@@ -131,15 +135,13 @@ export class Timeline {
         while (newCurrent.turn < targetTurn) {
             // async, don't block the ui thread
             if (newCurrent.turn % 5 === 0) await new Promise(r => setTimeout(r, 0));
-
             const delta = this.deltas[newCurrent.turn + 1];
-
             newCurrent.apply(delta);
             for (let cb of this.changeCbs) {
                 cb(newCurrent, delta);
             }
         }
-
+        
         this.current = newCurrent;
         lock.release();
         if (callback) {
@@ -159,7 +161,7 @@ export class TimelineCollection {
 
     gameIDs: schema.GameID[] = [];
 
-    apply(command: schema.OutgoingCommand) {
+    apply(command: schema.OutgoingCommand, callback?: (gameInfo: ActiveGameInfo) => void) {
         if (command.command === 'start') {
             this.timelines[command.gameID] = new Timeline(command);
             this.gameIDs.push(command.gameID);
@@ -196,6 +198,55 @@ export class TimelineCollection {
                     this.apply(turn);
                 }
                 delete this.unhandled[matchData.gameID];
+            }
+            
+            if (callback) {
+                const gameInfo: ActiveGameInfo = {
+                    gameID: gameID,
+                    status: 'running',
+                    mapName: matchData.initialState.mapName!,
+                    playerOne: matchData.teams[0].name,
+                    playerTwo: matchData.teams[1].name,
+                    closeActiveGame: getCloseActiveGame(gameID),
+                    viewActiveGame: getViewActiveGame(gameID),
+                }
+                callback(gameInfo);
+            }
+        } else if (command.command == 'replayResponse') {
+            let buf = base64.toByteArray(command.match);
+            let data: Uint8Array = inflate(buf);
+            let json = utf8.decodeUTF8(data);
+            let matchData = <schema.MatchData>JSON.parse(json);
+            let {gameID} = matchData;
+
+            this.apply({
+                command: "start",
+                gameID: matchData.gameID,
+                initialState: matchData.initialState,
+                teams: matchData.teams,
+                timeoutMS: 100,
+            });
+            for (let turn of matchData.turns) {
+                this.apply(turn);
+            }
+            if (this.unhandled[matchData.gameID] !== undefined) {
+                for (let turn of this.unhandled[matchData.gameID]) {
+                    this.apply(turn);
+                }
+                delete this.unhandled[matchData.gameID];
+            }
+
+            if (callback) {
+                const gameInfo: ActiveGameInfo = {
+                    gameID: gameID,
+                    status: 'finished',
+                    mapName: matchData.initialState.mapName!,
+                    playerOne: matchData.teams[0].name,
+                    playerTwo: matchData.teams[1].name,
+                    closeActiveGame: getCloseActiveGame(gameID),
+                    viewActiveGame: getViewActiveGame(gameID),
+                }
+                callback(gameInfo);
             }
         }
     }

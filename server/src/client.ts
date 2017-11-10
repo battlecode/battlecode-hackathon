@@ -5,7 +5,6 @@ import * as net from 'net';
 import * as byline from 'byline';
 import * as WebSocket from 'ws';
 import * as uuid from 'uuid/v4';
-import * as Ajv from 'ajv';
 
 /**
  * Wrappers for incoming / outgoing sockets.
@@ -29,7 +28,6 @@ type SocketEnum =
     {type: 'web', web: WebSocket};
 
 //const debug = (msg: string) => console.log(msg);
-const debug = (msg: string) => {};
 
 export class Client {
     /**
@@ -64,7 +62,7 @@ export class Client {
     static sendToAll(command: OutgoingCommand, clients: Client[]) {
         const serialized = JSON.stringify(command);
         for (let client of clients) {
-            debug(client.id + " < " + serialized);
+            //debug(client.id + " < " + serialized);
             client.sendString(serialized);
         }
     }
@@ -103,7 +101,7 @@ export class Client {
                 });
                 return;
             }
-            debug(this.id + " > "+JSON.stringify(command));
+            //debug(this.id + " > "+JSON.stringify(command));
             callback(command, this);
         };
         if (this.socket.type === 'tcp') {
@@ -123,7 +121,7 @@ export class Client {
     }
 
     send(command: OutgoingCommand) {
-        debug(this.id + " < " + JSON.stringify(command));
+        //debug(this.id + " < " + JSON.stringify(command));
         this.sendString(JSON.stringify(command));
     }
 
@@ -146,31 +144,11 @@ export class Client {
     }
 }
 
-// We generate a json-schema for the incoming messages during `npm run build`.
-// See package.json.
-// We then generate a validator for this schema using ajv from schema.ts;
-// so the validator is always in sync with our expected input.
-const validator = Ajv({
-    verbose: true,
-
-});
-validator.addMetaSchema(require('ajv/lib/refs/json-schema-draft-04.json'));
-const validate = validator.compile(require('./incomingschema.json'));
 const validateIncoming = (command: string | Buffer) => {
     const commandS = typeof(command) === 'string' ?
       command : command.toString();
 
     const data = JSON.parse(commandS);
-
-    const valid = validate(data);
-
-    if (!valid) {
-        if (!validate.errors) {
-            throw new Error('Invalid input');
-        } else {
-            throw new Error('Invalid input: '+validator.errorsText(validate.errors));
-        }
-    }
 
     return data as IncomingCommand;
 };

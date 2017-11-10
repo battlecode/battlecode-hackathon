@@ -34,6 +34,10 @@ export class ActiveGame extends Component<Props, State> {
             return 'Cancelled :(';
         }
     };
+
+    onViewClick = () => {
+        this.props.game.viewActiveGame();
+    }
     
     onCloseClick = () => {
         this.state.aboutToClose = true;
@@ -72,7 +76,7 @@ export class ActiveGame extends Component<Props, State> {
                      </span>
                 ) : (
                      <span>
-                         <button class="blue thin" key={`view${this.props.game.gameID}`}>View</button>
+                         <button class="blue thin" onclick={this.onViewClick} key={`view${this.props.game.gameID}`}>View</button>
                          <button class="red thin" onclick={this.onCloseClick} key={`close${this.props.game.gameID}`}>Close</button>
                      </span>
                 )}

@@ -10,4 +10,5 @@ export interface ActiveGameInfo {
     playerOne?: string;
     playerTwo?: string;
     closeActiveGame: () => void;
+    viewActiveGame: () => void;
 };

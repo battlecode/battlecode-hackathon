@@ -581,7 +581,9 @@ export default class Server {
 
         // map name may include slashes
         let sanitizedMapName = <string>game.game.initialState.mapName;
-        sanitizedMapName = sanitizedMapName.replace('/', '-').slice(0, sanitizedMapName.length - '.json'.length);
+        sanitizedMapName = sanitizedMapName.replace('/', '-')
+            .replace('\\', '-')
+            .slice(0, sanitizedMapName.length - '.json'.length);
 
         let filename = `${teamnames}-${sanitizedMapName}-${game.id}.bch18`;
 

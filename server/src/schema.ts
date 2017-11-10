@@ -411,6 +411,12 @@ export interface GameReplay {
     matchData: string;
 }
 
+export interface PlayerConnected {
+    command: "playerConnected",
+
+    team: TeamID;
+}
+
 /**
  * Requests the server send all messages for all gameIDs.
  * Used by the viewer.
@@ -447,4 +453,4 @@ export type Action = MoveAction | PickupAction | ThrowAction | BuildAction | Dis
 export type IncomingCommand = Login | MakeTurn | SpectateAll | CreateGame | ListMapsRequest |
     ListReplaysRequest | ReplayRequest;
 export type OutgoingCommand = LoginConfirm | GameStart | NextTurn | MissedTurn | ErrorCommand | Keyframe |
-    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse;
+    ListMapsResponse | ListReplaysResponse | GameReplay | ReplayResponse | PlayerConnected;

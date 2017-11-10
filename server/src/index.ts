@@ -82,7 +82,7 @@ export class Lobby {
     /**
      * Clients that care about the end of this game.
      */
-    onEnd: Client[];
+    observers: Client[];
 
     spectators: Client[];
     debug: boolean;
@@ -123,9 +123,9 @@ export class Lobby {
         }
 
         this.playerTeams = []
-        this.onEnd = [];
+        this.observers = [];
         if (client && create.sendReplay) {
-            this.onEnd.push(client);
+            this.observers.push(client);
         }
 
         this.spectators = spectators;
@@ -146,9 +146,15 @@ export class Lobby {
             if (login.key !== requiredTeam.key) {
                 continue;
             }
-            // TODO override on server
+            let name;
+            if (requiredTeam.key !== undefined) {
+                // key is set, override name
+                name = requiredTeam.name;
+            } else {
+                name = login.name;
+            }
             let newTeam = {
-                name: login.name,
+                name: name,
                 teamID: requiredTeam.teamID
             };
             // assign player to team
@@ -162,11 +168,18 @@ export class Lobby {
             };
             client.send(confirmation);
 
+            for (let observer of this.observers) {
+                observer.send({
+                    command: 'playerConnected',
+                    team: newTeam.teamID
+                });
+            }
+
             if (this.requiredTeams.length == 0) {
                 return new GameRunner(this.id,
                     this.map,
                     this.playerTeams,
-                    this.onEnd,
+                    this.observers,
                     this.spectators,
                     this.debug,
                     this.timeoutMS
@@ -183,9 +196,9 @@ export class Lobby {
     }
 
     deleteClient(id: ClientID): boolean {
-        for (let i = 0; i < this.onEnd.length; i++) {
-            if (this.onEnd[i].id == id) {
-                this.onEnd.splice(i, 1);
+        for (let i = 0; i < this.observers.length; i++) {
+            if (this.observers[i].id == id) {
+                this.observers.splice(i, 1);
             }
         }
         for (let i = 0; i < this.playerTeams.length; i++) {
@@ -204,7 +217,7 @@ export class GameRunner {
     players: Map<ClientID, TeamID>;
     game: Game;
     pastTurns: NextTurn[];
-    onEnd: Client[];
+    observers: Client[];
     started: boolean;
     winner?: TeamData;
     spectators: Client[];
@@ -220,7 +233,7 @@ export class GameRunner {
         id: GameID,
         map: MapFile,
         playerTeams: [Client, TeamData][],
-        onEnd: Client[],
+        observers: Client[],
         spectators: Client[],
         debug: boolean,
         timeoutMS: number
@@ -240,7 +253,7 @@ export class GameRunner {
         teams.sort((a,b) => a.teamID - b.teamID);
 
         this.game = new Game(id, map, teams, debug);
-        this.onEnd = onEnd;
+        this.observers = observers;
         this.pastTurns = [];
         this.started = false;
         this.spectators = spectators;
@@ -379,9 +392,9 @@ export class GameRunner {
             }
             return true;
         }
-        for (let i = 0; i < this.onEnd.length; i++) {
-            if (this.onEnd[i].id === id) {
-                this.onEnd.splice(i, 1);
+        for (let i = 0; i < this.observers.length; i++) {
+            if (this.observers[i].id === id) {
+                this.observers.splice(i, 1);
                 break;
             }
         }

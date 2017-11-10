@@ -122,7 +122,7 @@ export class RendererComponent extends Component<RendererProps, RendererState> {
             let data = this.state.entData as schema.EntityData;
             return <div style={`position: fixed; bottom: 50px;
                 left: 50px; border: gray solid 3px; font-family: ourfont; padding: 3px;`}>
-                hp: {data.id}
+                id: {data.id}
                 <br/>
                 type: {data.type}
                 <br/>

@@ -150,6 +150,7 @@ export class Game {
 
         // spawn throwers from controlled sectors every 10 turns
         if (turn % 10 === 0) {
+            try {
             let spawnedThrowers = this.getSpawnedThrowers();
 
             if (typeof spawnedThrowers === 'string') throw new Error(spawnedThrowers);
@@ -160,15 +161,18 @@ export class Game {
                     throw new Error(err);
                 }
             }
+	    } catch (e) {}
         }
         // deal fatigue damage
         for (var entity of this.entities.values()) {
+            try {
             if (entity.holdingEnd && entity.holdingEnd < this.turn) {
                 let err = this.dealDamage(entity.id, DAMAGES.fatigue);
                 if (typeof err === 'string') {
                     throw new Error(err);
                 }
             }
+            } catch (e) {}
         }
 
         diff.changedSectors = this.getChangedSectors();
@@ -400,7 +404,7 @@ export class Game {
         let results = new Array<EntityData>();
         for (var id of this.spawned) {
             let ent = this.getEntity(id);
-            if (typeof ent === 'string') return ent;
+            if (typeof ent === 'string') continue;
             results.push(ent.getData());
         }
         this.spawned = [];

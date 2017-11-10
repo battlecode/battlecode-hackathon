@@ -345,6 +345,10 @@ class Sectors {
             new THREE.Vector3(5-.5+.01,  -.5+.01, .1),
             new THREE.Vector3( -.5+.01, 5-.5+.01, .1),
             new THREE.Vector3(5-.5+.01, 5-.5+.01, .1),
+            new THREE.Vector3( -.5,  -.5, .01 ),
+            new THREE.Vector3(5-.5,  -.5, .01 ),
+            new THREE.Vector3( -.5, 5-.5, .01 ),
+            new THREE.Vector3(5-.5, 5-.5, .01 ),
         );
         g.faces.push(
             new THREE.Face3(0,1,4),
@@ -355,11 +359,13 @@ class Sectors {
             new THREE.Face3(0,6,4),
             new THREE.Face3(1,3,7),
             new THREE.Face3(1,7,5),
+            new THREE.Face3(8,9,10),
+            new THREE.Face3(9,10,11),
         );
         this.geometry = new THREE.BufferGeometry().fromGeometry(g);
         this.materials = [];
         for (let col of TEAM_COLORS) {
-            this.materials.push(new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.7, side: THREE.DoubleSide}));
+            this.materials.push(new THREE.MeshBasicMaterial({color: col, transparent: true, opacity: 0.3, side: THREE.DoubleSide}));
         }
     }
 

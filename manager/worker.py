@@ -62,26 +62,9 @@ def random_key(length):
     return key
 
 def unpack(filePath, destinationFilePath):
-    tempPath = os.path.join(destinationFilePath, "bot")
-    os.mkdir(tempPath)
-
     # Extract the archive into a folder call 'bot'
-    if platform.system() == 'Windows':
-        os.system("7z x -o"+tempPath+" -y "+filePath+". > NUL")
-    else:
-        os.system("tar -xzf -u -C"+tempPath+" "+filePath+" > /dev/null 2> /dev/null")
-
-    # Remove __MACOSX folder if present
-    macFolderPath = os.path.join(tempPath, "__MACOSX")
-    if os.path.exists(macFolderPath) and os.path.isdir(macFolderPath):
-        shutil.rmtree(macFolderPath)
-
-    # Copy contents of bot folder to destinationFilePath remove bot folder
-    for filename in os.listdir(tempPath):
-        shutil.move(os.path.join(tempPath, filename), os.path.join(destinationFilePath, filename))
-
-    shutil.rmtree(tempPath)
-    #os.remove(filePath)
+    command = "tar -xzf " + os.path.abspath(".") + "/" + filePath + " -C "+ os.path.abspath(".") + "/" + destinationFilePath
+    os.system(command)
 
 def runGame(bots):
     # Setup working path
@@ -100,17 +83,17 @@ def runGame(bots):
     sandboxes = [Sandbox(os.path.abspath(workingPathA)), Sandbox(os.path.abspath(workingPathB))]
 
     # Unpack and setup bot files
-    botPaths = [os.path.join(workingPathA, str(bots[0]['botID'])), os.path.join(workingPathB, str(bots[1]['botID']))]
+    botPaths = [workingPathA,workingPathB]
 
-    for botPath in botPaths: os.mkdir(botPath)
     for a in range(len(bots)): unpack(bots[a]['path'], botPaths[a])
     for index, botPath in enumerate(botPaths):
         if os.path.isfile(os.path.join(botPath, "run.sh")) == False:
             return
+    
         os.chmod(botPath, 0o777)
         os.chmod(os.path.join(botPath, "run.sh"), 0o777)
-        runGameShellCommand = os.path.join(os.path.abspath(botPath), "run.sh") + " " + bots[index]['key']
-
+        
+        runGameShellCommand = "cd " + os.path.abspath(botPath) + " && ./run.sh" + " " + bots[index]['key']
         sandboxes[index].start(runGameShellCommand)
 
     return sandboxes
@@ -151,7 +134,6 @@ def endGame(game):
     winner = 0 if teamA==teamB else 1 if teamA>teamB else 2
     if winner == 0:
         print(prefix+"Game between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " failed, nobody connected to the engine.")
-        print("db id: " + str(game['db_id']))
         c.execute("UPDATE scrimmage_matches SET status='failed' WHERE id=%s", [game['db_id']])
         conn.commit()
         return
@@ -241,7 +223,7 @@ while True:
                             winners.append(i+1)
                     match['winner'] = 0 if len(winners)==0 else 1 if winners[0]==0 else 2
                     endGame(game)
-                    print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + "timed out (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
+                    print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " timed out (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
         continue
 
     queuedGame = queuedGames[0]

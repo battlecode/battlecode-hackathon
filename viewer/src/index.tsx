@@ -108,7 +108,7 @@ const createGame = (map: string) => {
         command: "createGame",
         map: map,
         sendReplay: true,
-        timeoutMS: 100,
+        timeoutMS: 2000,
     };
     ws.send(JSON.stringify(create));
 }

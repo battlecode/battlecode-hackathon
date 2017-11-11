@@ -158,7 +158,7 @@ export class Game {
             for (var thrower of spawnedThrowers) {
                 let err = this.spawnEntity(thrower);
                 if (typeof err === 'string') {
-                    throw new Error(err);
+                    //throw new Error(err);
                 }
             }
 	    } catch (e) {}
@@ -169,7 +169,7 @@ export class Game {
             if (entity.holdingEnd && entity.holdingEnd < this.turn) {
                 let err = this.dealDamage(entity.id, DAMAGES.fatigue);
                 if (typeof err === 'string') {
-                    throw new Error(err);
+                    //throw new Error(err);
                 }
             }
             } catch (e) {}

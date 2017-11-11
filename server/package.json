@@ -1,6 +1,6 @@
 {
   "name": "@battlecode/battlehack",
-  "version": "17.0.5",
+  "version": "17.0.6",
   "description": "BATTLEHACK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

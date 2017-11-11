@@ -29,7 +29,7 @@ sneak = {'ng_id':None,'DB_BEING_USED':False}
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
-MAX_GAMES = 4
+MAX_GAMES = 1 
 INIT_TIME = 60
 
 ELO_K = 20
@@ -94,7 +94,7 @@ def runGame(bots):
         os.chmod(botPath, 0o777)
         os.chmod(os.path.join(botPath, "run.sh"), 0o777)
         
-        runGameShellCommand = "cd " + os.path.abspath(botPath) + " && ./run.sh" + " " + bots[index]['key']
+        runGameShellCommand = "cd " + os.path.abspath(botPath) + " && chmod +x run.sh && ./run.sh" + " " + bots[index]['key']
         sandboxes[index].start(runGameShellCommand)
 
     return sandboxes
@@ -176,7 +176,7 @@ def listen(games, socket, sneak):
                     if match['ng_id'] == message['id']:
                         if message['command'] == 'playerConnected':
                             match['connected'][int(message['team'])-1] = True
-                            print(prefix+game['teams'][int(message['team'])-1]['name'] + " connected in match against " + game['teams'][int(not bool(int(message['team'])))-1]['name'] + ".")
+                            print(prefix+game['teams'][int(message['team'])-1]['name'] + " connected in match against " + game['teams'][int(not bool(int(message['team'])-1))]['name'] + ".")
                         if message['command'] == 'gameReplay':
                             match['replay_data'] = message['matchData']
                             match['winner'] = int(message['winner']['teamID'])
@@ -187,7 +187,7 @@ def listen(games, socket, sneak):
 
 
 def startGame(teams, match_map):
-    command = json.dumps({"command":"createGame","sendReplay":True,"serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True})
+    command = json.dumps({"command":"createGame","sendReplay":True,"serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True,"timeoutMS":1000000})
     s.send(command.encode())
     s.send(b'\n')
 
@@ -234,7 +234,7 @@ while True:
         while sneak['DB_BEING_USED']:
             sleep(0.005)
         sneak['DB_BEING_USED'] = True        
-        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
+        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time DESC")
     
         queuedGames = c.fetchall()
         sneak['DB_BEING_USED'] = False
@@ -244,7 +244,7 @@ while True:
         continue
     
     if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
-        time.sleep(0.005)
+        time.sleep(0.100)
         for game in running_games:
             for match in game['matches']:
                 timePassed = (datetime.datetime.now() - game['start']).total_seconds()

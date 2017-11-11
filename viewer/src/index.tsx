@@ -20,9 +20,6 @@ import { GameStatus, ActiveGameInfo } from './types';
 require('purecss/build/pure.css');
 require('./style.css');
 
-
-
-
 let timelines = new state.TimelineCollection();
 window['timelines'] = timelines;
 
@@ -39,8 +36,11 @@ let activeGames: {[gameID: string]: ActiveGameInfo} = {};
 
 let currentGameID: string | undefined;
 
+let hasServer;
+
 let ws: ReconnectingWebSocket;
 if (window['BATTLECODE_RUN_MATCH'] !== undefined) {
+    hasServer = false;
     fetch(window['BATTLECODE_RUN_MATCH']).then(async result => {
         timelines.loadReplay(new Uint8Array(await result.arrayBuffer()));
         currentGameID = timelines.gameIDs[0];
@@ -50,6 +50,7 @@ if (window['BATTLECODE_RUN_MATCH'] !== undefined) {
         console.log(err);
     });
 } else {
+    hasServer = true;
     ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
         maxReconnectInterval: 5000
     });
@@ -220,6 +221,7 @@ const renderer = () => {
                 isPlaying={isPlaying}
                 togglePlaying={togglePlaying}
                 togglePlaybackRate={togglePlaybackRate}
+                hasServer={hasServer}
             />
             <ActiveGamesList
                 games={Object.keys(activeGames).map((key) => activeGames[key])}

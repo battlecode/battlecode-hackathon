@@ -21,6 +21,7 @@ interface Props extends Inferno.Props {
     isPlaying: boolean;
     togglePlaying: () => void;
     togglePlaybackRate: () => void;
+    hasServer: boolean;
 }
 
 interface State {
@@ -52,32 +53,36 @@ export class TopBar extends Component<Props, State> {
         return (
             <div class="top-bar" style={`height: ${TOP_BAR_HEIGHT}px;`}>
                 <div style="height: 5px; width: 25px; float: left;" />
-                <DialogButton
-                    active={this.state.active[0]}
-                    idx={0}
-                    color="green"
-                    label="New game"
-                    xOffset={25}
-                    deselectAllExceptToggle={this.deselectAllExceptToggle}
-                >
-                    <NewGameMenu maps={this.props.maps} createGame={this.props.createGame} />
-                </DialogButton>
-                <DialogButton
-                    active={this.state.active[1]}
-                    idx={1}
-                    color="blue"
-                    label="Load game"
-                    xOffset={175}
-                    deselectAllExceptToggle={this.deselectAllExceptToggle}
-                >
-                    <LoadGameMenu replays={this.props.replays} loadReplay={this.props.loadReplay} />
-                </DialogButton>
+                {
+                    this.props.hasServer? ([
+                        <DialogButton
+                            active={this.state.active[0]}
+                            idx={0}
+                            color="green"
+                            label="New game"
+                            xOffset={25}
+                            deselectAllExceptToggle={this.deselectAllExceptToggle}
+                        >
+                            <NewGameMenu maps={this.props.maps} createGame={this.props.createGame} />
+                        </DialogButton>,
+                        <DialogButton
+                            active={this.state.active[1]}
+                            idx={1}
+                            color="blue"
+                            label="Load game"
+                            xOffset={175}
+                            deselectAllExceptToggle={this.deselectAllExceptToggle}
+                        >
+                            <LoadGameMenu replays={this.props.replays} loadReplay={this.props.loadReplay} />
+                        </DialogButton>
+                    ]) : '' 
+                }
                 <DialogButton
                     active={this.state.active[2]}
                     idx={2}
                     color="red"
                     label="Viewer controls"
-                    xOffset={325}
+                    xOffset={this.props.hasServer? 325 : 25}
                     deselectAllExceptToggle={this.deselectAllExceptToggle}
                 >
                     <ViewerSettingsMenu 
@@ -94,6 +99,7 @@ export class TopBar extends Component<Props, State> {
                     farthestRound={this.props.farthestRound}
                     maxRound={this.props.maxRound}
                     changeRound={this.props.changeRound}
+                    hasServer={this.props.hasServer}
                 />
             </div>
         );

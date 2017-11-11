@@ -10,13 +10,19 @@ interface TimelineProps {
     currentRound: number;
     farthestRound: number;
     maxRound: number;
+    hasServer: boolean;
     changeRound: (number) => void;
 }
 
 export class Timeline extends Component<TimelineProps, {}> {
 
     absToRound = (x: number) => {
-        const offset = 502;
+        let offset;
+        if (this.props.hasServer) {
+            offset = 502;
+        } else {
+            offset = 202;
+        }
         return (x - offset) * (this.props.maxRound / TIMELINE_WIDTH);
     }
 

@@ -29,7 +29,7 @@ sneak = {'ng_id':None,'DB_BEING_USED':False}
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
-MAX_GAMES = 4
+MAX_GAMES = 1 
 INIT_TIME = 60
 
 ELO_K = 20
@@ -94,7 +94,7 @@ def runGame(bots):
         os.chmod(botPath, 0o777)
         os.chmod(os.path.join(botPath, "run.sh"), 0o777)
         
-        runGameShellCommand = "cd " + os.path.abspath(botPath) + " && ./run.sh" + " " + bots[index]['key']
+        runGameShellCommand = "cd " + os.path.abspath(botPath) + " && chmod +x run.sh && ./run.sh" + " " + bots[index]['key']
         sandboxes[index].start(runGameShellCommand)
 
     return sandboxes
@@ -176,7 +176,7 @@ def listen(games, socket, sneak):
                     if match['ng_id'] == message['id']:
                         if message['command'] == 'playerConnected':
                             match['connected'][int(message['team'])-1] = True
-                            print(prefix+game['teams'][int(message['team'])-1]['name'] + " connected in match against " + game['teams'][int(not bool(int(message['team'])))-1]['name'] + ".")
+                            print(prefix+game['teams'][int(message['team'])-1]['name'] + " connected in match against " + game['teams'][int(not bool(int(message['team'])-1))]['name'] + ".")
                         if message['command'] == 'gameReplay':
                             match['replay_data'] = message['matchData']
                             match['winner'] = int(message['winner']['teamID'])
@@ -187,7 +187,7 @@ def listen(games, socket, sneak):
 
 
 def startGame(teams, match_map):
-    command = json.dumps({"command":"createGame","sendReplay":True,"serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True})
+    command = json.dumps({"command":"createGame","sendReplay":True,"serverKey":config.SERVER_KEY,"teams":teams,"map":match_map,"sendReplay":True,"timeoutMS":1000000})
     s.send(command.encode())
     s.send(b'\n')
 

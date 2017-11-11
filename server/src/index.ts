@@ -376,19 +376,22 @@ export class GameRunner {
         this.pastTurns.push(nextTurn);
 
         if (nextTurn.winnerID) {
-            this.winner = this.game.teams[nextTurn.winnerID];
-
-            this.status.status = "finished";
-            Client.sendToAll(this.status, this.spectators);
-            for (let client of this.playerClients) {
-                client.close();
-            }
-            let replay = await this.makeReplay();
-            replay.winner = this.winner;
-            Client.sendToAll(replay, this.observers);
+            await this.finish(nextTurn.winnerID);
         } else {
             this.startTimeout();
         }
+    }
+
+    async finish(winnerID: TeamID) {
+        this.winner = this.game.teams[winnerID];
+        this.status.status = "finished";
+        Client.sendToAll(this.status, this.spectators);
+        for (let client of this.playerClients) {
+            client.close();
+        }
+        let replay = await this.makeReplay();
+        replay.winner = this.winner;
+        Client.sendToAll(replay, this.observers);
     }
 
     async makeReplay(): Promise<GameReplay> {
@@ -690,12 +693,15 @@ export default class Server {
                 let type;
                 if (game instanceof GameRunner) {
                     type = 'active game';
+                    let id = game.players.get(client.id);
+                    this.log(`Sending termination for game: ${prettyID(game.id)}`);
+                    game.finish(id == 1 ? 2 : 1)
                     saves.push(this.saveGame(game));
                 } else {
                     type = 'lobby';
                 }
 
-                this.log(`Ending ${type} early: ${prettyID(game.id)}`);
+                this.log(`Ended ${type} early: ${prettyID(game.id)}`);
                 this.games.delete(game.id);
             }
         }

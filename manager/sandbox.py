@@ -100,7 +100,7 @@ class Sandbox:
         return False
 
     def start(self, shell_command):
-        shell_command = "docker run -d -v "+self.working_directory+":"+self.working_directory+" --cpus='1' --memory='256m' --memory-swap='256m' --privileged=true 817fdb26d5bf sh -c \'" + shell_command + " " + self.docker_ip + " \'"
+        shell_command = "docker run -d -v "+self.working_directory+":"+self.working_directory+" --cpus='1' --memory='256m' --memory-swap='256m' --privileged=true ec8e615b0ba5 sh -c \'" + shell_command + " " + self.docker_ip + " \'"
 
         if self.is_alive:
             raise SandboxError("Tried to run command with one in progress.")
@@ -142,6 +142,7 @@ class Sandbox:
         key = self.stdout_queue.get(block=True, timeout=10)
         try:
             os.system("docker container kill " + key + " > /dev/null")
+            os.system("docker container rm " + key + " > /dev/null")
             self.command_process.kill()
         except OSError:
             print("error killing")

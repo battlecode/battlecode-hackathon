@@ -244,7 +244,7 @@ while True:
         continue
     
     if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
-        time.sleep(0.005)
+        time.sleep(0.100)
         for game in running_games:
             for match in game['matches']:
                 timePassed = (datetime.datetime.now() - game['start']).total_seconds()

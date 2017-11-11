@@ -67,7 +67,6 @@ def _guard_monitor(jail):
 
 
 def _monitor_file(fd, q):
-    #print("Start monitor")
     while True:
         line = fd.readline()
         if len(line.strip())==64:
@@ -108,6 +107,7 @@ class Sandbox:
         self.child_queue = Queue()
         shell_command = shlex.split(shell_command.replace('\\','/'))
         try:
+            print('popen',shell_command)
             self.command_process = subprocess.Popen(shell_command,
                                                     stdin=subprocess.PIPE,
                                                     stdout=subprocess.PIPE,

@@ -29,7 +29,7 @@ sneak = {'ng_id':None,'DB_BEING_USED':False}
 s3 = boto3.resource('s3')
 bucket = s3.Bucket(config.BUCKET_NAME)
 
-MAX_GAMES = 1 
+MAX_GAMES = 16
 INIT_TIME = 60
 
 ELO_K = 20
@@ -68,6 +68,7 @@ def unpack(filePath, destinationFilePath):
     os.system(command)
 
 def runGame(bots):
+    print('runGame', bots)
     # Setup working path
     workingPathA = "workingPath/" + random_key(20) + "/"
     if os.path.exists(workingPathA):
@@ -89,11 +90,13 @@ def runGame(bots):
     for a in range(len(bots)): unpack(bots[a]['path'], botPaths[a])
     for index, botPath in enumerate(botPaths):
         if os.path.isfile(os.path.join(botPath, "run.sh")) == False:
+            print('no run.sh for',bots[index])
             return
     
         os.chmod(botPath, 0o777)
         os.chmod(os.path.join(botPath, "run.sh"), 0o777)
         
+        print('starting',bots[index])
         runGameShellCommand = "cd " + os.path.abspath(botPath) + " && chmod +x run.sh && ./run.sh" + " " + bots[index]['key']
         sandboxes[index].start(runGameShellCommand)
 
@@ -168,11 +171,13 @@ def listen(games, socket, sneak):
     socket = socket.makefile('rwb',2**16)
     while True:
         message = json.loads(next(socket).decode())
+        print('message:',message['command'])
         if message['command'] == 'createGameConfirm':
             sneak['ng_id'] = message['gameID']
         else:
             for game in games:
                 for match in game['matches']:
+                    print("match_id: " +match['ng_id'])
                     if match['ng_id'] == message['id']:
                         if message['command'] == 'playerConnected':
                             match['connected'][int(message['team'])-1] = True
@@ -222,7 +227,7 @@ def getTeamRating(id, sneak):
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
     s.connect(('127.0.0.1', 6147))
-    _thread.start_new_thread(listen,(running_games, s, sneak))
+    _thread.start_new_thread(listen, (running_games, s, sneak))
 except Exception as e:
     print(prefix + "Failed to connect to engine. Exiting.")
     sys.exit()
@@ -234,7 +239,7 @@ while True:
         while sneak['DB_BEING_USED']:
             sleep(0.005)
         sneak['DB_BEING_USED'] = True        
-        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time DESC")
+        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time ASC")
     
         queuedGames = c.fetchall()
         sneak['DB_BEING_USED'] = False
@@ -243,7 +248,7 @@ while True:
         time.sleep(0.005)
         continue
     
-    if len(running_games) >= MAX_GAMES or len(queuedGames) < 1:
+    if len(running_games) >= max(MAX_GAMES,1) or len(queuedGames) < 1:
         time.sleep(0.100)
         for game in running_games:
             for match in game['matches']:
@@ -253,7 +258,7 @@ while True:
                     for i in range(2):
                         if match['connected'][i]:
                             winners.append(i+1)
-                    match['winner'] = 0 if len(winners)==0 else 1 if winners[0]==0 else 2
+                    match['winner'] = 0 if len(winners)==0 else winners[0]
                     endGame(game,sneak)
                     print(prefix+"Match between " + game['teams'][0]['name'] + " and " + game['teams'][1]['name'] + " timed out (" + ("red" if match['winner']==1 else "blue" if match['winner']==2 else "nobody") + " won).")
         continue
@@ -288,6 +293,7 @@ while True:
 
     matches = []
     teams = [{"name":queuedGame[5],"key":None,"db_id":queuedGame[1]},{"name":queuedGame[6],"key":None,"db_id":queuedGame[2]}]
+    running_games.append({'db_id':queuedGame[0],'start':datetime.datetime.now(),'teams':teams,'matches':matches})
     for index, cur_map in enumerate(maps):
         redKey, blueKey = random_key(20), random_key(20)
         bots = [{"botID": queuedGame[1], "key":redKey, "path": "botA.tar.gz"},{"botID": queuedGame[2], "key":blueKey, "path": "botB.tar.gz"}]
@@ -304,7 +310,10 @@ while True:
         matches.append({"ng_id":sneak['ng_id'],"sandboxes":runGame(bots),"connected":[False,False],"replay_data":None,"winner":None})
         sneak['ng_id'] = None
 
-    running_games.append({'db_id':queuedGame[0],'start':datetime.datetime.now(),'teams':teams,'matches':matches})
+        if MAX_GAMES == 0:
+            while matches[-1]['winner'] is None:
+                time.sleep(0.100)
+
 
 """
 os.system("sudo rm /run/network/ifstate.veth*")

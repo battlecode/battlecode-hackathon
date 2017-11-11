@@ -234,7 +234,7 @@ while True:
         while sneak['DB_BEING_USED']:
             sleep(0.005)
         sneak['DB_BEING_USED'] = True        
-        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time")
+        c.execute("SELECT m.id AS id, red_team, blue_team, s1.source_code AS red_source, s2.source_code as blue_source, t1.name as red_name, t2.name as blue_name, maps FROM scrimmage_matches m INNER JOIN scrimmage_submissions s1 on m.red_submission=s1.id INNER JOIN scrimmage_submissions s2 on m.blue_submission=s2.id INNER JOIN battlecode_teams t1 on m.red_team=t1.id INNER JOIN battlecode_teams t2 on m.blue_team=t2.id WHERE status='queued' ORDER BY request_time DESC")
     
         queuedGames = c.fetchall()
         sneak['DB_BEING_USED'] = False

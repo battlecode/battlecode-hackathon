@@ -613,7 +613,7 @@ export default class Server {
                 command: "createGame",
                 map: await this.loadMap(this.mapNames[Math.floor(Math.random() * this.mapNames.length)]),
                 sendReplay: false,
-                timeoutMS: 100
+                timeoutMS: 2000
             },
             this.spectators,
             this.opts.debug

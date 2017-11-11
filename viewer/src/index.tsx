@@ -20,9 +20,8 @@ import { GameStatus, ActiveGameInfo } from './types';
 require('purecss/build/pure.css');
 require('./style.css');
 
-let ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
-    maxReconnectInterval: 5000
-});
+
+
 
 let timelines = new state.TimelineCollection();
 window['timelines'] = timelines;
@@ -40,75 +39,90 @@ let activeGames: {[gameID: string]: ActiveGameInfo} = {};
 
 let currentGameID: string | undefined;
 
-ws.onclose = (event) => {
-    console.log('ws connection closed');
-};
-ws.onopen = (event) => {
-    const spectate: schema.SpectateAll = {
-        command: "spectateAll"
-    };
-    ws.send(JSON.stringify(spectate));
-    const getMaps: schema.ListMapsRequest = {
-        command: "listMapsRequest"
-    };
-    ws.send(JSON.stringify(getMaps));
-    const getReplays: schema.ListReplaysRequest = {
-        command: "listReplaysRequest"
-    };
-    ws.send(JSON.stringify(getReplays));
-}
-ws.onerror = (err) => {
-    console.log('ws error: ', err);
-};
-ws.onmessage = (message) => {
-    // TODO validate?
-    let command = JSON.parse(message.data) as schema.OutgoingCommand;
-    if (command.command === "listMapsResponse") {
-        maps = command.mapNames;
-    }
-    if (command.command === "listReplaysResponse") {
-        replays = command.replayNames;
-    }
-    if (command.command === "gameStatusUpdate") {
-        if (command.gameID in activeGames) {
-            if ((command.status == 'finished' || command.status == 'cancelled') || (command.status == 'running' && activeGames[command.gameID].status == 'lobby')) {
-                activeGames[command.gameID].status = command.status;
-            }
-        } else {
-            activeGames[command.gameID] = {
-                gameID: command.gameID,
-                status: command.status as GameStatus,
-                mapName: command.map,
-                closeActiveGame: getCloseActiveGame(command.gameID),
-                viewActiveGame: getViewActiveGame(command.gameID),
-            }
-        }
-        if (command.connected.length > 0) {
-            activeGames[command.gameID].playerOne = command.connected[0];
-        }
-        if (command.connected.length > 1) {
-            activeGames[command.gameID].playerTwo = command.connected[1];
-        }
-    }
-    if (command.command === "start") {
-        currentGameID = command.gameID;
+let ws: ReconnectingWebSocket;
+if (window['BATTLECODE_RUN_MATCH'] !== undefined) {
+    fetch(window['BATTLECODE_RUN_MATCH']).then(async result => {
+        timelines.loadReplay(new Uint8Array(await result.arrayBuffer()));
+        currentGameID = timelines.gameIDs[0];
         isPlaying = true;
+    })
+    .catch(err => {
+        console.log(err);
+    });
+} else {
+    ws = new ReconnectingWebSocket('ws://localhost:6148/', [], {
+        maxReconnectInterval: 5000
+    });
+    ws.onclose = (event) => {
+        console.log('ws connection closed');
+    };
+    ws.onopen = (event) => {
+        const spectate: schema.SpectateAll = {
+            command: "spectateAll"
+        };
+        ws.send(JSON.stringify(spectate));
+        const getMaps: schema.ListMapsRequest = {
+            command: "listMapsRequest"
+        };
+        ws.send(JSON.stringify(getMaps));
+        const getReplays: schema.ListReplaysRequest = {
+            command: "listReplaysRequest"
+        };
+        ws.send(JSON.stringify(getReplays));
     }
-    if (command.command != "gameReplay") {
-        timelines.apply(command, addNewGame);
-    }
-    for (let cb of updateCbs) {
-        cb();
-    }
-    render();
-};
+    ws.onerror = (err) => {
+        console.log('ws error: ', err);
+    };
+    ws.onmessage = (message) => {
+        // TODO validate?
+        let command = JSON.parse(message.data) as schema.OutgoingCommand;
+        if (command.command === "listMapsResponse") {
+            maps = command.mapNames;
+        }
+        if (command.command === "listReplaysResponse") {
+            replays = command.replayNames;
+        }
+        if (command.command === "gameStatusUpdate") {
+            if (command.gameID in activeGames) {
+                if ((command.status == 'finished' || command.status == 'cancelled') || (command.status == 'running' && activeGames[command.gameID].status == 'lobby')) {
+                    activeGames[command.gameID].status = command.status;
+                }
+            } else {
+                activeGames[command.gameID] = {
+                    gameID: command.gameID,
+                    status: command.status as GameStatus,
+                    mapName: command.map,
+                    closeActiveGame: getCloseActiveGame(command.gameID),
+                    viewActiveGame: getViewActiveGame(command.gameID),
+                }
+            }
+            if (command.connected.length > 0) {
+                activeGames[command.gameID].playerOne = command.connected[0];
+            }
+            if (command.connected.length > 1) {
+                activeGames[command.gameID].playerTwo = command.connected[1];
+            }
+        }
+        if (command.command === "start") {
+            currentGameID = command.gameID;
+            isPlaying = true;
+        }
+        if (command.command != "gameReplay") {
+            timelines.apply(command, addNewGame);
+        }
+        for (let cb of updateCbs) {
+            cb();
+        }
+        render();
+    };
+}
 
 const createGame = (map: string) => {
     const create: schema.CreateGame = {
         command: "createGame",
         map: map,
         sendReplay: true,
-        timeoutMS: 100,
+        timeoutMS: 2000,
     };
     ws.send(JSON.stringify(create));
 }

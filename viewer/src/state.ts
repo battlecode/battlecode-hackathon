@@ -13,6 +13,7 @@ import {
     getCloseActiveGame,
     getViewActiveGame,
 } from './index';
+import { MatchData } from './schema';
 
 export class State {
     gameID: schema.GameID;
@@ -178,37 +179,17 @@ export class TimelineCollection {
             }
         } else if (command.command === 'gameReplay') {
             let buf = base64.toByteArray(command.matchData);
-            let data: Uint8Array = inflate(buf);
-            let json = utf8.decodeUTF8(data);
-            let matchData = <schema.MatchData>JSON.parse(json);
-            let {gameID} = matchData;
-
-            this.apply({
-                command: "start",
-                gameID: matchData.gameID,
-                initialState: matchData.initialState,
-                teams: matchData.teams,
-                timeoutMS: 100,
-            });
-            for (let turn of matchData.turns) {
-                this.apply(turn);
-            }
-            if (this.unhandled[matchData.gameID] !== undefined) {
-                for (let turn of this.unhandled[matchData.gameID]) {
-                    this.apply(turn);
-                }
-                delete this.unhandled[matchData.gameID];
-            }
+            const matchData = this.loadReplay(buf);
             
             if (callback) {
                 const gameInfo: ActiveGameInfo = {
-                    gameID: gameID,
+                    gameID: matchData.gameID,
                     status: 'running',
                     mapName: matchData.initialState.mapName!,
                     playerOne: matchData.teams[0].name,
                     playerTwo: matchData.teams[1].name,
-                    closeActiveGame: getCloseActiveGame(gameID),
-                    viewActiveGame: getViewActiveGame(gameID),
+                    closeActiveGame: getCloseActiveGame(matchData.gameID),
+                    viewActiveGame: getViewActiveGame(matchData.gameID),
                 }
                 callback(gameInfo);
             }
@@ -254,5 +235,30 @@ export class TimelineCollection {
     delete(gameID: schema.GameID) {
         delete this.timelines[gameID];
         this.gameIDs.splice(this.gameIDs.indexOf(gameID), 1);
+    }
+
+    loadReplay(datagz: Uint8Array): MatchData {
+        let data: Uint8Array = inflate(datagz);
+        let json = utf8.decodeUTF8(data);
+        let matchData = <schema.MatchData>JSON.parse(json);
+        let {gameID} = matchData;
+
+        this.apply({
+            command: "start",
+            gameID: matchData.gameID,
+            initialState: matchData.initialState,
+            teams: matchData.teams,
+            timeoutMS: 100,
+        });
+        for (let turn of matchData.turns) {
+            this.apply(turn);
+        }
+        if (this.unhandled[matchData.gameID] !== undefined) {
+            for (let turn of this.unhandled[matchData.gameID]) {
+                this.apply(turn);
+            }
+            delete this.unhandled[matchData.gameID];
+        }
+        return matchData;
     }
 }
